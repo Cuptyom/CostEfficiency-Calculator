@@ -68,27 +68,27 @@ class EconomicCalculator(QMainWindow):
         self.tu = QDoubleSpinBox()
         self.tu.setRange(0, 10000)
         self.tu.setValue(194.4)
-        form_layout.addRow("Исследование алгоритма:", self.tu)
+        form_layout.addRow("Исследование алгоритма (tu):", self.tu)
         
         self.ta = QDoubleSpinBox()
         self.ta.setRange(0, 10000)
         self.ta.setValue(185.14)
-        form_layout.addRow("Разработка блок-схемы:", self.ta)
+        form_layout.addRow("Разработка блок-схемы (ta):", self.ta)
         
         self.tn = QDoubleSpinBox()
         self.tn.setRange(0, 10000)
         self.tn.setValue(204.69)
-        form_layout.addRow("Программирование:", self.tn)
+        form_layout.addRow("Программирование (tn):", self.tn)
         
         self.toml = QDoubleSpinBox()
         self.toml.setRange(0, 10000)
         self.toml.setValue(288.0)
-        form_layout.addRow("Отладка программы:", self.toml)
+        form_layout.addRow("Отладка программы (toml):", self.toml)
         
         self.td = QDoubleSpinBox()
         self.td.setRange(0, 10000)
         self.td.setValue(151.2)
-        form_layout.addRow("Подготовка документации:", self.td)
+        form_layout.addRow("Подготовка документации (td):", self.td)
         
         # Группа 2: Финансовые параметры
         form_layout.addRow(QLabel("<b>Финансовые параметры:</b>"))
@@ -227,19 +227,15 @@ class EconomicCalculator(QMainWindow):
         
         # 1. Общие трудозатраты
         T = tu + ta + tn + toml + td
-        T_formula = f"{tu} + {ta} + {tn} + {toml} + {td}"
         
         # 2. Расходы на оплату труда и страховые взносы
         Z_ot = T * hourly * insurance
-        Z_ot_formula = f"{T:.2f} × {hourly} × {insurance}"
         
         # 3. Затраты на машинное время
         Z_mv = machine_hour * (tn + toml)
-        Z_mv_formula = f"{machine_hour} × ({tn} + {toml})"
         
         # 4. Затраты на электроэнергию
         Z_el = electricity * power * (tn + toml + td)
-        Z_el_formula = f"{electricity} × {power} × ({tn} + {toml} + {td})"
         
         # 5. Прочие затраты (5%)
         Z_pr = 0.05 * (Z_ot + Z_mv + Z_el)
@@ -252,19 +248,15 @@ class EconomicCalculator(QMainWindow):
         
         # 8. Трудоёмкость задачи
         T_r = work_hours * (labor_intensity / 100)
-        T_r_formula = f"{work_hours} × {labor_intensity} / 100"
         
         # 9. Затраты по базовому варианту
         Z_b = hourly * T_r * (1 / salary_share)
-        Z_b_formula = f"{hourly} × {T_r:.2f} × (1 / {salary_share})"
         
         # 10. Затраты при использовании программы
         Z_pp = (work_hours * machine_hour + Z_rp) / useful_life
-        Z_pp_formula = f"({work_hours} × {machine_hour} + {Z_rp:.2f}) / {useful_life}"
         
         # 11. Экономическая эффективность
         E = Z_b - Z_pp
-        E_formula = f"{Z_b:.2f} - {Z_pp:.2f}"
         
         # 12. Срок окупаемости
         R_total = pc_cost + Z_rp
@@ -282,50 +274,149 @@ class EconomicCalculator(QMainWindow):
         self.results_layout.addWidget(title)
         
         # Разделитель
-        self.results_layout.addWidget(QLabel("="*80))
+        self.results_layout.addWidget(QLabel("="*90))
         
         # Функция для добавления результата
-        def add_result(name, value, formula, unit=""):
+        def add_result(name, general_formula, formula_with_values, value, unit=""):
             group = QGroupBox(name)
             layout = QVBoxLayout(group)
             
             # Формула в общем виде
-            formula_label = QLabel(f"<b>Формула:</b> {formula}")
-            formula_label.setStyleSheet("font-family: 'Courier New';")
-            layout.addWidget(formula_label)
+            general_label = QLabel(f"<b>Формула (общий вид):</b> {general_formula}")
+            general_label.setStyleSheet("font-family: 'Courier New'; color: #2c3e50;")
+            layout.addWidget(general_label)
             
             # Формула с подставленными значениями
+            values_label = QLabel(f"<b>С подстановкой:</b> {formula_with_values}")
+            values_label.setStyleSheet("font-family: 'Courier New'; color: #34495e;")
+            layout.addWidget(values_label)
+            
+            # Результат
             if unit:
                 result_label = QLabel(f"<b>Результат:</b> {value:,.2f} {unit}")
             else:
                 result_label = QLabel(f"<b>Результат:</b> {value:,.2f}")
-            result_label.setStyleSheet("color: #2c3e50;")
+            result_label.setStyleSheet("color: #2980b9; font-weight: bold;")
             layout.addWidget(result_label)
             
             self.results_layout.addWidget(group)
         
-        # Вывод всех результатов
-        add_result("Общие трудозатраты", T, T_formula, "чел-час")
-        add_result("Расходы на оплату труда и страховые взносы", Z_ot, Z_ot_formula, "руб")
-        add_result("Затраты на машинное время", Z_mv, Z_mv_formula, "руб")
-        add_result("Затраты на электроэнергию", Z_el, Z_el_formula, "руб")
-        add_result("Прочие затраты", Z_pr, "5% × (Зот + Змв + Зэл)", "руб")
-        add_result("Затраты на разработку", Z_rp, "Зот + Змв + Зэл + Зпр", "руб")
-        add_result("Амортизация", A, f"({dep_rate}% / 100) × {Z_rp:.2f}", "руб/год")
-        add_result("Трудоёмкость задачи", T_r, T_r_formula, "час/год")
-        add_result("Затраты по базовому варианту", Z_b, Z_b_formula, "руб/год")
-        add_result("Затраты при использовании ПО", Z_pp, Z_pp_formula, "руб/год")
-        add_result("Экономическая эффективность", E, E_formula, "руб/год")
+        # Вывод всех результатов с тремя строками: общая формула, с подстановкой, результат
         
+        # 1. Общие трудозатраты
+        add_result(
+            "1. Общие трудозатраты",
+            "T = tu + ta + tn + toml + td",
+            f"T = {tu} + {ta} + {tn} + {toml} + {td}",
+            T, "чел-час"
+        )
+        
+        # 2. Расходы на оплату труда и страховые взносы
+        add_result(
+            "2. Расходы на оплату труда и страховые взносы",
+            "Зот = T × Сч × кспр",
+            f"Зот = {T:.2f} × {hourly} × {insurance}",
+            Z_ot, "руб"
+        )
+        
+        # 3. Затраты на машинное время
+        add_result(
+            "3. Затраты на машинное время",
+            "Змв = Смч × (tn + toml)",
+            f"Змв = {machine_hour} × ({tn} + {toml})",
+            Z_mv, "руб"
+        )
+        
+        # 4. Затраты на электроэнергию
+        add_result(
+            "4. Затраты на электроэнергию",
+            "Зэл = Цэл × Р × (tn + toml + td)",
+            f"Зэл = {electricity} × {power} × ({tn} + {toml} + {td})",
+            Z_el, "руб"
+        )
+        
+        # 5. Прочие затраты
+        add_result(
+            "5. Прочие затраты",
+            "Зпр = 5% × (Зот + Змв + Зэл)",
+            f"Зпр = 0.05 × ({Z_ot:.2f} + {Z_mv:.2f} + {Z_el:.2f})",
+            Z_pr, "руб"
+        )
+        
+        # 6. Затраты на разработку
+        add_result(
+            "6. Затраты на разработку",
+            "Зрп = Зот + Змв + Зэл + Зпр",
+            f"Зрп = {Z_ot:.2f} + {Z_mv:.2f} + {Z_el:.2f} + {Z_pr:.2f}",
+            Z_rp, "руб"
+        )
+        
+        # 7. Амортизация
+        add_result(
+            "7. Амортизация",
+            "Ад = (На × К) / 100",
+            f"Ад = ({dep_rate} × {Z_rp:.2f}) / 100",
+            A, "руб/год"
+        )
+        
+        # 8. Трудоёмкость задачи
+        add_result(
+            "8. Трудоёмкость задачи",
+            "Тр = Тп.к × Нтр / 100",
+            f"Тр = {work_hours} × {labor_intensity} / 100",
+            T_r, "час/год"
+        )
+        
+        # 9. Затраты по базовому варианту
+        add_result(
+            "9. Затраты по базовому варианту",
+            "Зб = Сч × Тр × (1 / Дз.п)",
+            f"Зб = {hourly} × {T_r:.2f} × (1 / {salary_share})",
+            Z_b, "руб/год"
+        )
+        
+        # 10. Затраты при использовании программы
+        add_result(
+            "10. Затраты при использовании ПО",
+            "Зп.п = (Тг × См + Зобщ) / Тс",
+            f"Зп.п = ({work_hours} × {machine_hour} + {Z_rp:.2f}) / {useful_life}",
+            Z_pp, "руб/год"
+        )
+        
+        # 11. Экономическая эффективность
+        add_result(
+            "11. Экономическая эффективность",
+            "Э = Зб - Зп.п",
+            f"Э = {Z_b:.2f} - {Z_pp:.2f}",
+            E, "руб/год"
+        )
+        
+        # 12. Срок окупаемости
         if T_ok != float('inf'):
-            add_result("Срок окупаемости", T_ok, f"{R_total:.2f} / {E:.2f}", "лет")
+            add_result(
+                "12. Срок окупаемости",
+                "Ток = Робщ / Э",
+                f"Ток = {R_total:.2f} / {E:.2f}",
+                T_ok, "лет"
+            )
         else:
-            add_result("Срок окупаемости", 0, "E <= 0", "лет")
+            add_result(
+                "12. Срок окупаемости",
+                "Ток = Робщ / Э",
+                f"Ток = {R_total:.2f} / {E:.2f} (Э ≤ 0)",
+                0, "лет"
+            )
         
-        add_result("Экономический эффект", E_eff, f"{E:.2f} / {R_total:.2f}", "руб/год")
+        # 13. Экономический эффект
+        add_result(
+            "13. Экономический эффект",
+            "Е = Э / Робщ",
+            f"Е = {E:.2f} / {R_total:.2f}",
+            E_eff, "руб/год"
+        )
         
         # Итоговое заключение
-        self.results_layout.addWidget(QLabel("="*80))
+        self.results_layout.addWidget(QLabel("="*90))
         conclusion = QLabel()
         if E > 0 and T_ok < 3:
             conclusion.setText("<b>✅ РАЗРАБОТКА ЭКОНОМИЧЕСКИ ЦЕЛЕСООБРАЗНА</b>")
