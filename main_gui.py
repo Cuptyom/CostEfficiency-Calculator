@@ -170,7 +170,6 @@ class EconomicCalculator(QMainWindow):
         QMessageBox {
             background-color: white;
         }
-        /* Стиль для полей с формулами (для выделения) */
         QTextEdit {
             background-color: #f8f9fc;
             border: 1px solid #d0d8e6;
@@ -184,7 +183,6 @@ class EconomicCalculator(QMainWindow):
             border: 2px solid #5b7cfa;
             background-color: #f4f7ff;
         }
-        /* Стиль для поля результата */
         QTextEdit[cssClass="result"] {
             background-color: #eef3ff;
             border: 2px solid #5b7cfa;
@@ -207,6 +205,24 @@ class EconomicCalculator(QMainWindow):
         scroll.setWidget(container)
         form_layout = QVBoxLayout(container)
         form_layout.setSpacing(15)
+
+        # ========== ИНСТРУКЦИЯ СВЕРХУ ==========
+        instruction_label = QLabel(
+            "ℹ️ <b>Инструкция:</b> Введите исходные данные в поля ниже. "
+            "Для быстрого заполнения нажмите <b>«Загрузить пример»</b>. "
+            "После ввода всех данных нажмите <b>«Рассчитать»</b> для получения отчёта."
+        )
+        instruction_label.setStyleSheet("""
+            background-color: #eef3ff;
+            border: 1px solid #5b7cfa;
+            border-radius: 8px;
+            padding: 10px;
+            color: #1f2a44;
+            font-size: 11pt;
+        """)
+        instruction_label.setWordWrap(True)
+        form_layout.insertWidget(0, instruction_label)  # вставляем в самое начало
+        # =======================================
 
         # Группа 1: Трудозатраты
         group_tu = QGroupBox("Трудозатраты (чел-час)")
