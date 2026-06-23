@@ -1,6 +1,6 @@
 import sys
 from PySide6.QtWidgets import *
-from PySide6.QtCore import Qt
+from PySide6.QtCore import Qt, QLocale
 from PySide6.QtGui import QIcon, QFont, QGuiApplication
 
 # =================== КАСТОМНЫЕ СПИНБОКСЫ БЕЗ КОЛЁСИКА ===================
@@ -20,6 +20,9 @@ class EconomicCalculator(QMainWindow):
         super().__init__()
         self.setWindowTitle("Расчёт экономической эффективности ПО")
         self.setMinimumSize(950, 750)
+
+        # Локаль для форматирования чисел (русская)
+        self.locale = QLocale("ru_RU")
 
         self.apply_styles()
 
@@ -69,6 +72,10 @@ class EconomicCalculator(QMainWindow):
 
         # Для копирования результатов
         self.results_text = ""
+
+    def format_number(self, value):
+        """Форматирует число в русском стиле (пробел как разделитель тысяч, запятая как десятичная)."""
+        return self.locale.toString(value, 'f', 2)
 
     def apply_styles(self):
         style = """
@@ -230,7 +237,7 @@ class EconomicCalculator(QMainWindow):
         group_tu_layout.setSpacing(8)
 
         self.tu = NoWheelDoubleSpinBox()
-        self.tu.setRange(0, 1e9)  # Минимум 0, максимум 1 миллиард
+        self.tu.setRange(0, 1e9)
         self.tu.setValue(194.4)
         self.tu.setToolTip("Затраты времени на исследование алгоритма")
         group_tu_layout.addRow("Исследование алгоритма (tu):", self.tu)
@@ -410,7 +417,7 @@ class EconomicCalculator(QMainWindow):
         text_edit = QTextEdit()
         text_edit.setPlainText(text)
         text_edit.setReadOnly(True)
-        
+
         if is_result:
             text_edit.setMaximumHeight(50)
             text_edit.setProperty("cssClass", "result")
@@ -418,7 +425,7 @@ class EconomicCalculator(QMainWindow):
         else:
             text_edit.setMaximumHeight(50)
             text_edit.setToolTip(tooltip if tooltip else "Выделите текст и скопируйте (Ctrl+C)")
-        
+
         text_edit.setStyleSheet("""
             QTextEdit {
                 background-color: #f8f9fc;
@@ -482,88 +489,95 @@ class EconomicCalculator(QMainWindow):
         T_ok = R_total / E if E > 0 else float('inf')
         E_eff = E / R_total if R_total > 0 else 0
 
-        # Формируем текст для копирования (весь отчёт)
+        # Вспомогательная функция для форматирования
+        def fmt(v):
+            return self.format_number(v)
+
+        # Формируем текст для копирования (весь отчёт) с русским форматом чисел
         lines = []
         lines.append("="*60)
         lines.append("РЕЗУЛЬТАТЫ РАСЧЁТА ЭКОНОМИЧЕСКОЙ ЭФФЕКТИВНОСТИ")
         lines.append("="*60)
 
         def add_to_copy(name, general, subst, value, unit=""):
+            val_str = fmt(value)
+            if unit:
+                val_str += f" {unit}"
             lines.append(f"\n{name}")
             lines.append(f"  {general}")
             lines.append(f"  {subst}")
-            lines.append(f"  Результат: {value:,.2f} {unit}".strip())
+            lines.append(f"  Результат: {val_str}")
             lines.append("-"*40)
 
         add_to_copy("1. Общие трудозатраты",
                     "T = tu + ta + tn + toml + td",
-                    f"T = {tu} + {ta} + {tn} + {toml} + {td} = {T:.2f}",
+                    f"T = {fmt(tu)} + {fmt(ta)} + {fmt(tn)} + {fmt(toml)} + {fmt(td)} = {fmt(T)}",
                     T, "чел-час")
 
         add_to_copy("2. Расходы на оплату труда и страховые взносы",
                     "Зот = T × Сч × кспр",
-                    f"Зот = {T:.2f} × {hourly} × {insurance} = {Z_ot:.2f}",
+                    f"Зот = {fmt(T)} × {fmt(hourly)} × {fmt(insurance)} = {fmt(Z_ot)}",
                     Z_ot, "руб")
 
         add_to_copy("3. Затраты на машинное время",
                     "Змв = Смч × (tn + toml)",
-                    f"Змв = {machine_hour} × ({tn} + {toml}) = {Z_mv:.2f}",
+                    f"Змв = {fmt(machine_hour)} × ({fmt(tn)} + {fmt(toml)}) = {fmt(Z_mv)}",
                     Z_mv, "руб")
 
         add_to_copy("4. Затраты на электроэнергию",
                     "Зэл = Цэл × Р × (tn + toml + td)",
-                    f"Зэл = {electricity} × {power} × ({tn} + {toml} + {td}) = {Z_el:.2f}",
+                    f"Зэл = {fmt(electricity)} × {fmt(power)} × ({fmt(tn)} + {fmt(toml)} + {fmt(td)}) = {fmt(Z_el)}",
                     Z_el, "руб")
 
         add_to_copy("5. Прочие затраты",
                     "Зпр = 5% × (Зот + Змв + Зэл)",
-                    f"Зпр = 0.05 × ({Z_ot:.2f} + {Z_mv:.2f} + {Z_el:.2f}) = {Z_pr:.2f}",
+                    f"Зпр = 0.05 × ({fmt(Z_ot)} + {fmt(Z_mv)} + {fmt(Z_el)}) = {fmt(Z_pr)}",
                     Z_pr, "руб")
 
         add_to_copy("6. Затраты на разработку",
                     "Зрп = Зот + Змв + Зэл + Зпр",
-                    f"Зрп = {Z_ot:.2f} + {Z_mv:.2f} + {Z_el:.2f} + {Z_pr:.2f} = {Z_rp:.2f}",
+                    f"Зрп = {fmt(Z_ot)} + {fmt(Z_mv)} + {fmt(Z_el)} + {fmt(Z_pr)} = {fmt(Z_rp)}",
                     Z_rp, "руб")
 
         add_to_copy("7. Амортизация",
                     "Ад = (На × Зрп) / 100",
-                    f"Ад = ({dep_rate} × {Z_rp:.2f}) / 100 = {A:.2f}",
+                    f"Ад = ({fmt(dep_rate)} × {fmt(Z_rp)}) / 100 = {fmt(A)}",
                     A, "руб/год")
 
         add_to_copy("8. Трудоёмкость задачи",
                     "Тр = Тп.к × Нтр / 100",
-                    f"Тр = {work_hours} × {labor_intensity} / 100 = {T_r:.2f}",
+                    f"Тр = {fmt(work_hours)} × {fmt(labor_intensity)} / 100 = {fmt(T_r)}",
                     T_r, "час/год")
 
         add_to_copy("9. Затраты по базовому варианту",
                     "Зб = Сч × Тр × (1 / Дз.п)",
-                    f"Зб = {hourly} × {T_r:.2f} × (1 / {salary_share}) = {Z_b:.2f}",
+                    f"Зб = {fmt(hourly)} × {fmt(T_r)} × (1 / {fmt(salary_share)}) = {fmt(Z_b)}",
                     Z_b, "руб/год")
 
         add_to_copy("10. Затраты при использовании ПО",
                     "Зп.п = (Тг × См + Зобщ) / Тс, где Зобщ = Зрп + Ад",
-                    f"Зп.п = ({work_hours} × {machine_hour} + {total_expenses:.2f}) / {useful_life} = {Z_pp:.2f}",
+                    f"Зп.п = ({fmt(work_hours)} × {fmt(machine_hour)} + {fmt(total_expenses)}) / {fmt(useful_life)} = {fmt(Z_pp)}",
                     Z_pp, "руб/год")
 
         add_to_copy("11. Экономическая эффективность",
                     "Э = Зб - Зп.п",
-                    f"Э = {Z_b:.2f} - {Z_pp:.2f} = {E:.2f}",
+                    f"Э = {fmt(Z_b)} - {fmt(Z_pp)} = {fmt(E)}",
                     E, "руб/год")
 
         if T_ok != float('inf'):
             add_to_copy("12. Срок окупаемости",
                         "Ток = Робщ / Э, где Робщ = Сбал + Зобщ",
-                        f"Ток = {R_total:.2f} / {E:.2f} = {T_ok:.2f}",
+                        f"Ток = {fmt(R_total)} / {fmt(E)} = {fmt(T_ok)}",
                         T_ok, "лет")
         else:
             add_to_copy("12. Срок окупаемости",
                         "Ток = Робщ / Э, где Робщ = Сбал + Зобщ",
-                        f"Ток = {R_total:.2f} / {E:.2f} (Э ≤ 0)",
+                        f"Ток = {fmt(R_total)} / {fmt(E)} (Э ≤ 0)",
                         0, "лет")
 
         add_to_copy("13. Экономический эффект",
                     "Е = Э / Робщ",
-                    f"Е = {E:.2f} / {R_total:.2f} = {E_eff:.4f}",
+                    f"Е = {fmt(E)} / {fmt(R_total)} = {fmt(E_eff)}",
                     E_eff, "руб/год")
 
         lines.append("\n" + "="*60)
@@ -609,7 +623,7 @@ class EconomicCalculator(QMainWindow):
 
             # Поле для формулы в общем виде
             general_field = self.create_copyable_field(
-                general_formula, 
+                general_formula,
                 "Нажмите Ctrl+A для выделения всей формулы, затем Ctrl+C для копирования"
             )
             layout.addWidget(general_field)
@@ -622,7 +636,7 @@ class EconomicCalculator(QMainWindow):
             layout.addWidget(values_field)
 
             # Поле для результата (отдельно, с выделением)
-            result_text = f"{value:,.2f} {unit}" if unit else f"{value:,.2f}"
+            result_text = f"{fmt(value)} {unit}" if unit else f"{fmt(value)}"
             result_field = self.create_copyable_field(
                 result_text,
                 f"Результат: {result_text}",
@@ -636,87 +650,87 @@ class EconomicCalculator(QMainWindow):
         add_result(
             "1. Общие трудозатраты",
             "T = tu + ta + tn + toml + td",
-            f"T = {tu} + {ta} + {tn} + {toml} + {td} = {T:.2f}",
+            f"T = {fmt(tu)} + {fmt(ta)} + {fmt(tn)} + {fmt(toml)} + {fmt(td)} = {fmt(T)}",
             T, "чел-час"
         )
         add_result(
             "2. Расходы на оплату труда и страховые взносы",
             "Зот = T × Сч × кспр",
-            f"Зот = {T:.2f} × {hourly} × {insurance} = {Z_ot:.2f}",
+            f"Зот = {fmt(T)} × {fmt(hourly)} × {fmt(insurance)} = {fmt(Z_ot)}",
             Z_ot, "руб"
         )
         add_result(
             "3. Затраты на машинное время",
             "Змв = Смч × (tn + toml)",
-            f"Змв = {machine_hour} × ({tn} + {toml}) = {Z_mv:.2f}",
+            f"Змв = {fmt(machine_hour)} × ({fmt(tn)} + {fmt(toml)}) = {fmt(Z_mv)}",
             Z_mv, "руб"
         )
         add_result(
             "4. Затраты на электроэнергию",
             "Зэл = Цэл × Р × (tn + toml + td)",
-            f"Зэл = {electricity} × {power} × ({tn} + {toml} + {td}) = {Z_el:.2f}",
+            f"Зэл = {fmt(electricity)} × {fmt(power)} × ({fmt(tn)} + {fmt(toml)} + {fmt(td)}) = {fmt(Z_el)}",
             Z_el, "руб"
         )
         add_result(
             "5. Прочие затраты",
             "Зпр = 5% × (Зот + Змв + Зэл)",
-            f"Зпр = 0.05 × ({Z_ot:.2f} + {Z_mv:.2f} + {Z_el:.2f}) = {Z_pr:.2f}",
+            f"Зпр = 0.05 × ({fmt(Z_ot)} + {fmt(Z_mv)} + {fmt(Z_el)}) = {fmt(Z_pr)}",
             Z_pr, "руб"
         )
         add_result(
             "6. Затраты на разработку",
             "Зрп = Зот + Змв + Зэл + Зпр",
-            f"Зрп = {Z_ot:.2f} + {Z_mv:.2f} + {Z_el:.2f} + {Z_pr:.2f} = {Z_rp:.2f}",
+            f"Зрп = {fmt(Z_ot)} + {fmt(Z_mv)} + {fmt(Z_el)} + {fmt(Z_pr)} = {fmt(Z_rp)}",
             Z_rp, "руб"
         )
         add_result(
             "7. Амортизация",
             "Ад = (На × Зрп) / 100",
-            f"Ад = ({dep_rate} × {Z_rp:.2f}) / 100 = {A:.2f}",
+            f"Ад = ({fmt(dep_rate)} × {fmt(Z_rp)}) / 100 = {fmt(A)}",
             A, "руб/год"
         )
         add_result(
             "8. Трудоёмкость задачи",
             "Тр = Тп.к × Нтр / 100",
-            f"Тр = {work_hours} × {labor_intensity} / 100 = {T_r:.2f}",
+            f"Тр = {fmt(work_hours)} × {fmt(labor_intensity)} / 100 = {fmt(T_r)}",
             T_r, "час/год"
         )
         add_result(
             "9. Затраты по базовому варианту",
             "Зб = Сч × Тр × (1 / Дз.п)",
-            f"Зб = {hourly} × {T_r:.2f} × (1 / {salary_share}) = {Z_b:.2f}",
+            f"Зб = {fmt(hourly)} × {fmt(T_r)} × (1 / {fmt(salary_share)}) = {fmt(Z_b)}",
             Z_b, "руб/год"
         )
         add_result(
             "10. Затраты при использовании ПО",
             "Зп.п = (Тг × См + Зобщ) / Тс, где Зобщ = Зрп + Ад",
-            f"Зп.п = ({work_hours} × {machine_hour} + {total_expenses:.2f}) / {useful_life} = {Z_pp:.2f}",
+            f"Зп.п = ({fmt(work_hours)} × {fmt(machine_hour)} + {fmt(total_expenses)}) / {fmt(useful_life)} = {fmt(Z_pp)}",
             Z_pp, "руб/год"
         )
         add_result(
             "11. Экономическая эффективность",
             "Э = Зб - Зп.п",
-            f"Э = {Z_b:.2f} - {Z_pp:.2f} = {E:.2f}",
+            f"Э = {fmt(Z_b)} - {fmt(Z_pp)} = {fmt(E)}",
             E, "руб/год"
         )
         if T_ok != float('inf'):
             add_result(
                 "12. Срок окупаемости",
                 "Ток = Робщ / Э, где Робщ = Сбал + Зобщ",
-                f"Ток = {R_total:.2f} / {E:.2f} = {T_ok:.2f}",
+                f"Ток = {fmt(R_total)} / {fmt(E)} = {fmt(T_ok)}",
                 T_ok, "лет"
             )
         else:
             add_result(
                 "12. Срок окупаемости",
                 "Ток = Робщ / Э, где Робщ = Сбал + Зобщ",
-                f"Ток = {R_total:.2f} / {E:.2f} (Э ≤ 0)",
+                f"Ток = {fmt(R_total)} / {fmt(E)} (Э ≤ 0)",
                 0, "лет"
             )
         add_result(
             "13. Экономический эффект",
             "Е = Э / Робщ",
-            f"Е = {E:.2f} / {R_total:.2f} = {E_eff:.4f}",
+            f"Е = {fmt(E)} / {fmt(R_total)} = {fmt(E_eff)}",
             E_eff, "руб/год"
         )
 
@@ -758,6 +772,8 @@ class EconomicCalculator(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
+    # Устанавливаем русскую локаль для корректного отображения и ввода чисел
+    QLocale.setDefault(QLocale("ru_RU"))
     window = EconomicCalculator()
     window.show()
     sys.exit(app.exec())
