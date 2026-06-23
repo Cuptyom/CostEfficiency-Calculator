@@ -129,12 +129,12 @@ class EconomicCalculator(QMainWindow):
             background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                                         stop:0 #2b4fc7, stop:1 #1e3a9e);
         }
-        /* Исправленные стили для спинбоксов - добавляем отступы для кнопок */
+        /* Стили для спинбоксов - убираем кнопки-стрелки */
         NoWheelDoubleSpinBox, NoWheelSpinBox {
             background-color: white;
             border: 1px solid #ccd4e0;
             border-radius: 6px;
-            padding: 5px 25px 5px 10px;
+            padding: 5px 10px;
             min-height: 28px;
             min-width: 120px;
         }
@@ -142,17 +142,17 @@ class EconomicCalculator(QMainWindow):
             border: 2px solid #5b7cfa;
             background-color: #f4f7ff;
         }
-        /* Стиль для кнопок-стрелок внутри спинбокса */
+        /* Скрываем кнопки-стрелки */
         NoWheelDoubleSpinBox::up-button, NoWheelSpinBox::up-button,
         NoWheelDoubleSpinBox::down-button, NoWheelSpinBox::down-button {
-            width: 20px;
+            width: 0px;
+            height: 0px;
             border: none;
-            background: transparent;
         }
-        NoWheelDoubleSpinBox::up-button:hover, NoWheelSpinBox::up-button:hover,
-        NoWheelDoubleSpinBox::down-button:hover, NoWheelSpinBox::down-button:hover {
-            background: #e0e7f5;
-            border-radius: 3px;
+        NoWheelDoubleSpinBox::up-arrow, NoWheelSpinBox::up-arrow,
+        NoWheelDoubleSpinBox::down-arrow, NoWheelSpinBox::down-arrow {
+            width: 0px;
+            height: 0px;
         }
         QTabWidget::pane {
             border: 1px solid #c8d0db;
