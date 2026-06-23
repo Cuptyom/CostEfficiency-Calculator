@@ -221,7 +221,7 @@ class EconomicCalculator(QMainWindow):
             font-size: 11pt;
         """)
         instruction_label.setWordWrap(True)
-        form_layout.insertWidget(0, instruction_label)  # вставляем в самое начало
+        form_layout.insertWidget(0, instruction_label)
         # =======================================
 
         # Группа 1: Трудозатраты
@@ -230,31 +230,31 @@ class EconomicCalculator(QMainWindow):
         group_tu_layout.setSpacing(8)
 
         self.tu = NoWheelDoubleSpinBox()
-        self.tu.setRange(0, 10000)
+        self.tu.setRange(0, 1e9)  # Минимум 0, максимум 1 миллиард
         self.tu.setValue(194.4)
         self.tu.setToolTip("Затраты времени на исследование алгоритма")
         group_tu_layout.addRow("Исследование алгоритма (tu):", self.tu)
 
         self.ta = NoWheelDoubleSpinBox()
-        self.ta.setRange(0, 10000)
+        self.ta.setRange(0, 1e9)
         self.ta.setValue(185.14)
         self.ta.setToolTip("Затраты времени на разработку блок-схемы")
         group_tu_layout.addRow("Разработка блок-схемы (ta):", self.ta)
 
         self.tn = NoWheelDoubleSpinBox()
-        self.tn.setRange(0, 10000)
+        self.tn.setRange(0, 1e9)
         self.tn.setValue(204.69)
         self.tn.setToolTip("Затраты времени на программирование")
         group_tu_layout.addRow("Программирование (tn):", self.tn)
 
         self.toml = NoWheelDoubleSpinBox()
-        self.toml.setRange(0, 10000)
+        self.toml.setRange(0, 1e9)
         self.toml.setValue(288.0)
         self.toml.setToolTip("Затраты времени на отладку программы")
         group_tu_layout.addRow("Отладка программы (toml):", self.toml)
 
         self.td = NoWheelDoubleSpinBox()
-        self.td.setRange(0, 10000)
+        self.td.setRange(0, 1e9)
         self.td.setValue(151.2)
         self.td.setToolTip("Затраты времени на подготовку документации")
         group_tu_layout.addRow("Подготовка документации (td):", self.td)
@@ -267,32 +267,32 @@ class EconomicCalculator(QMainWindow):
         group_fin_layout.setSpacing(8)
 
         self.hourly_rate = NoWheelDoubleSpinBox()
-        self.hourly_rate.setRange(0, 100000)
+        self.hourly_rate.setRange(0, 1e9)
         self.hourly_rate.setValue(238.1)
         self.hourly_rate.setToolTip("Среднечасовая оплата труда разработчика")
         group_fin_layout.addRow("Среднечасовая оплата (руб/час):", self.hourly_rate)
 
         self.insurance = NoWheelDoubleSpinBox()
-        self.insurance.setRange(0, 10)
+        self.insurance.setRange(0, 1e9)
         self.insurance.setValue(1.3)
         self.insurance.setSingleStep(0.05)
         self.insurance.setToolTip("Коэффициент, учитывающий страховые взносы")
         group_fin_layout.addRow("Коэф. страховых взносов:", self.insurance)
 
         self.machine_hour = NoWheelDoubleSpinBox()
-        self.machine_hour.setRange(0, 10000)
+        self.machine_hour.setRange(0, 1e9)
         self.machine_hour.setValue(21.05)
         self.machine_hour.setToolTip("Стоимость одного машино-часа работы ПК")
         group_fin_layout.addRow("Стоимость машино-часа (руб):", self.machine_hour)
 
         self.electricity = NoWheelDoubleSpinBox()
-        self.electricity.setRange(0, 100)
+        self.electricity.setRange(0, 1e9)
         self.electricity.setValue(7.28)
         self.electricity.setToolTip("Стоимость 1 кВт·ч электроэнергии")
         group_fin_layout.addRow("Стоимость электроэнергии (руб/кВт·ч):", self.electricity)
 
         self.power = NoWheelDoubleSpinBox()
-        self.power.setRange(0, 10)
+        self.power.setRange(0, 1e9)
         self.power.setValue(0.5)
         self.power.setSingleStep(0.05)
         self.power.setToolTip("Мощность, потребляемая ПК (кВт)")
@@ -306,19 +306,19 @@ class EconomicCalculator(QMainWindow):
         group_base_layout.setSpacing(8)
 
         self.work_hours = NoWheelDoubleSpinBox()
-        self.work_hours.setRange(0, 8760)
+        self.work_hours.setRange(0, 1e9)
         self.work_hours.setValue(2112)
         self.work_hours.setToolTip("Годовой фонд рабочего времени")
         group_base_layout.addRow("Фонд рабочего времени (час/год):", self.work_hours)
 
         self.labor_intensity = NoWheelDoubleSpinBox()
-        self.labor_intensity.setRange(0, 100)
+        self.labor_intensity.setRange(0, 1e9)
         self.labor_intensity.setValue(39)
         self.labor_intensity.setToolTip("Трудоёмкость решаемой задачи в % от общего времени")
         group_base_layout.addRow("Трудоёмкость задачи (%):", self.labor_intensity)
 
         self.salary_share = NoWheelDoubleSpinBox()
-        self.salary_share.setRange(0, 1)
+        self.salary_share.setRange(0, 1e9)
         self.salary_share.setValue(0.5)
         self.salary_share.setSingleStep(0.05)
         self.salary_share.setToolTip("Доля заработной платы в общей смете затрат")
@@ -332,20 +332,20 @@ class EconomicCalculator(QMainWindow):
         group_amort_layout.setSpacing(8)
 
         self.useful_life = NoWheelSpinBox()
-        self.useful_life.setRange(1, 20)
+        self.useful_life.setRange(0, 1e9)
         self.useful_life.setValue(6)
         self.useful_life.setToolTip("Срок полезного использования ПО (лет)")
         group_amort_layout.addRow("Срок полезного использования (лет):", self.useful_life)
 
         self.depreciation_rate = NoWheelDoubleSpinBox()
-        self.depreciation_rate.setRange(0, 100)
+        self.depreciation_rate.setRange(0, 1e9)
         self.depreciation_rate.setValue(16.67)
         self.depreciation_rate.setSingleStep(0.01)
         self.depreciation_rate.setToolTip("Годовая норма амортизации (%)")
         group_amort_layout.addRow("Норма амортизации (%):", self.depreciation_rate)
 
         self.pc_cost = NoWheelDoubleSpinBox()
-        self.pc_cost.setRange(0, 10000000)
+        self.pc_cost.setRange(0, 1e9)
         self.pc_cost.setValue(129600)
         self.pc_cost.setToolTip("Стоимость компьютера (руб)")
         group_amort_layout.addRow("Стоимость ПК (руб):", self.pc_cost)
