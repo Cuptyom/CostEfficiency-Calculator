@@ -75,7 +75,15 @@ class EconomicCalculator(QMainWindow):
 
     def format_number(self, value):
         """Форматирует число в русском стиле (пробел как разделитель тысяч, запятая как десятичная)."""
+        if isinstance(value, int):
+            value = float(value)
         return self.locale.toString(value, 'f', 2)
+
+    def format_number_no_decimals(self, value):
+        """Форматирует целое число без десятичных знаков."""
+        if isinstance(value, int):
+            return self.locale.toString(value)
+        return self.locale.toString(round(value), 'f', 0)
 
     def apply_styles(self):
         style = """
@@ -121,16 +129,30 @@ class EconomicCalculator(QMainWindow):
             background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                                         stop:0 #2b4fc7, stop:1 #1e3a9e);
         }
+        /* Исправленные стили для спинбоксов - добавляем отступы для кнопок */
         NoWheelDoubleSpinBox, NoWheelSpinBox {
             background-color: white;
             border: 1px solid #ccd4e0;
             border-radius: 6px;
-            padding: 5px 8px;
-            min-height: 24px;
+            padding: 5px 25px 5px 10px;
+            min-height: 28px;
+            min-width: 120px;
         }
         NoWheelDoubleSpinBox:focus, NoWheelSpinBox:focus {
             border: 2px solid #5b7cfa;
             background-color: #f4f7ff;
+        }
+        /* Стиль для кнопок-стрелок внутри спинбокса */
+        NoWheelDoubleSpinBox::up-button, NoWheelSpinBox::up-button,
+        NoWheelDoubleSpinBox::down-button, NoWheelSpinBox::down-button {
+            width: 20px;
+            border: none;
+            background: transparent;
+        }
+        NoWheelDoubleSpinBox::up-button:hover, NoWheelSpinBox::up-button:hover,
+        NoWheelDoubleSpinBox::down-button:hover, NoWheelSpinBox::down-button:hover {
+            background: #e0e7f5;
+            border-radius: 3px;
         }
         QTabWidget::pane {
             border: 1px solid #c8d0db;
@@ -373,7 +395,6 @@ class EconomicCalculator(QMainWindow):
         self.results_layout = QVBoxLayout(self.results_container)
         self.results_layout.setSpacing(12)
 
-        # Кнопка копирования (будет добавлена позже)
         self.copy_btn = QPushButton("📋 Копировать все результаты")
         self.copy_btn.setMinimumHeight(40)
         self.copy_btn.clicked.connect(self.copy_results)
@@ -426,27 +447,6 @@ class EconomicCalculator(QMainWindow):
             text_edit.setMaximumHeight(50)
             text_edit.setToolTip(tooltip if tooltip else "Выделите текст и скопируйте (Ctrl+C)")
 
-        text_edit.setStyleSheet("""
-            QTextEdit {
-                background-color: #f8f9fc;
-                border: 1px solid #d0d8e6;
-                border-radius: 6px;
-                padding: 6px 8px;
-                font-family: 'Consolas', 'Courier New', monospace;
-                font-size: 10pt;
-                color: #1f2a44;
-            }
-            QTextEdit:focus {
-                border: 2px solid #5b7cfa;
-                background-color: #f4f7ff;
-            }
-            QTextEdit[cssClass="result"] {
-                background-color: #eef3ff;
-                border: 2px solid #5b7cfa;
-                font-weight: bold;
-                color: #1f2a44;
-            }
-        """)
         return text_edit
 
     def calculate(self):
@@ -492,8 +492,11 @@ class EconomicCalculator(QMainWindow):
         # Вспомогательная функция для форматирования
         def fmt(v):
             return self.format_number(v)
+        
+        def fmt_int(v):
+            return self.format_number_no_decimals(v)
 
-        # Формируем текст для копирования (весь отчёт) с русским форматом чисел
+        # Формируем текст для копирования (весь отчёт)
         lines = []
         lines.append("="*60)
         lines.append("РЕЗУЛЬТАТЫ РАСЧЁТА ЭКОНОМИЧЕСКОЙ ЭФФЕКТИВНОСТИ")
@@ -556,7 +559,7 @@ class EconomicCalculator(QMainWindow):
 
         add_to_copy("10. Затраты при использовании ПО",
                     "Зп.п = (Тг × См + Зобщ) / Тс, где Зобщ = Зрп + Ад",
-                    f"Зп.п = ({fmt(work_hours)} × {fmt(machine_hour)} + {fmt(total_expenses)}) / {fmt(useful_life)} = {fmt(Z_pp)}",
+                    f"Зп.п = ({fmt(work_hours)} × {fmt(machine_hour)} + {fmt(total_expenses)}) / {fmt_int(useful_life)} = {fmt(Z_pp)}",
                     Z_pp, "руб/год")
 
         add_to_copy("11. Экономическая эффективность",
@@ -621,21 +624,18 @@ class EconomicCalculator(QMainWindow):
             layout = QVBoxLayout(group)
             layout.setSpacing(4)
 
-            # Поле для формулы в общем виде
             general_field = self.create_copyable_field(
                 general_formula,
                 "Нажмите Ctrl+A для выделения всей формулы, затем Ctrl+C для копирования"
             )
             layout.addWidget(general_field)
 
-            # Поле для формулы с подстановкой и результатом
             values_field = self.create_copyable_field(
                 formula_with_values,
                 "Нажмите Ctrl+A для выделения всей формулы, затем Ctrl+C для копирования"
             )
             layout.addWidget(values_field)
 
-            # Поле для результата (отдельно, с выделением)
             result_text = f"{fmt(value)} {unit}" if unit else f"{fmt(value)}"
             result_field = self.create_copyable_field(
                 result_text,
@@ -704,7 +704,7 @@ class EconomicCalculator(QMainWindow):
         add_result(
             "10. Затраты при использовании ПО",
             "Зп.п = (Тг × См + Зобщ) / Тс, где Зобщ = Зрп + Ад",
-            f"Зп.п = ({fmt(work_hours)} × {fmt(machine_hour)} + {fmt(total_expenses)}) / {fmt(useful_life)} = {fmt(Z_pp)}",
+            f"Зп.п = ({fmt(work_hours)} × {fmt(machine_hour)} + {fmt(total_expenses)}) / {fmt_int(useful_life)} = {fmt(Z_pp)}",
             Z_pp, "руб/год"
         )
         add_result(
@@ -742,7 +742,6 @@ class EconomicCalculator(QMainWindow):
 
         conclusion = QLabel()
         conclusion.setAlignment(Qt.AlignCenter)
-        conclusion.setStyleSheet("font-size: 14px; padding: 12px; border-radius: 8px; font-weight: bold;")
         if E > 0 and T_ok < 3:
             conclusion.setText("✅ РАЗРАБОТКА ЭКОНОМИЧЕСКИ ЦЕЛЕСООБРАЗНА")
             conclusion.setStyleSheet("background: #e2f0d9; color: #1e6b2e; font-size: 16px; font-weight: bold; border-radius: 10px; padding: 12px;")
@@ -754,7 +753,6 @@ class EconomicCalculator(QMainWindow):
             conclusion.setStyleSheet("background: #f8d7da; color: #721c24; font-size: 16px; font-weight: bold; border-radius: 10px; padding: 12px;")
         self.results_layout.addWidget(conclusion)
 
-        # Информация о возможности копирования
         info_label = QLabel("💡 Для копирования отдельных формул выделите текст в поле выше и нажмите Ctrl+C")
         info_label.setStyleSheet("color: #6c757d; font-size: 10pt; font-style: italic; padding: 5px;")
         info_label.setAlignment(Qt.AlignCenter)
@@ -772,7 +770,6 @@ class EconomicCalculator(QMainWindow):
 
 def main():
     app = QApplication(sys.argv)
-    # Устанавливаем русскую локаль для корректного отображения и ввода чисел
     QLocale.setDefault(QLocale("ru_RU"))
     window = EconomicCalculator()
     window.show()
