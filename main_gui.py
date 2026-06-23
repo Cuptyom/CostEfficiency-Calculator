@@ -136,7 +136,8 @@ class EconomicCalculator(QMainWindow):
             border-radius: 6px;
             padding: 5px 10px;
             min-height: 28px;
-            min-width: 120px;
+            min-width: 100px;
+            max-width: 150px;
         }
         NoWheelDoubleSpinBox:focus, NoWheelSpinBox:focus {
             border: 2px solid #5b7cfa;
@@ -153,6 +154,14 @@ class EconomicCalculator(QMainWindow):
         NoWheelDoubleSpinBox::down-arrow, NoWheelSpinBox::down-arrow {
             width: 0px;
             height: 0px;
+        }
+        /* Стиль для меток единиц измерения */
+        QLabel[cssClass="unit"] {
+            color: #5b7cfa;
+            font-weight: bold;
+            font-size: 10pt;
+            padding: 0 5px;
+            min-width: 40px;
         }
         QTabWidget::pane {
             border: 1px solid #c8d0db;
@@ -221,6 +230,58 @@ class EconomicCalculator(QMainWindow):
         """
         self.setStyleSheet(style)
 
+    def create_input_row(self, label_text, unit_text):
+        """Создаёт строку с меткой, полем ввода и единицей измерения"""
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.setSpacing(5)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Метка с названием
+        label = QLabel(label_text)
+        label.setMinimumWidth(250)
+        layout.addWidget(label)
+        
+        # Поле ввода
+        spinbox = NoWheelDoubleSpinBox()
+        spinbox.setRange(0, 1e9)
+        layout.addWidget(spinbox)
+        
+        # Метка с единицей измерения
+        unit_label = QLabel(unit_text)
+        unit_label.setProperty("cssClass", "unit")
+        layout.addWidget(unit_label)
+        
+        layout.addStretch()
+        
+        return widget, spinbox
+
+    def create_int_input_row(self, label_text, unit_text):
+        """Создаёт строку с меткой, целочисленным полем ввода и единицей измерения"""
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.setSpacing(5)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Метка с названием
+        label = QLabel(label_text)
+        label.setMinimumWidth(250)
+        layout.addWidget(label)
+        
+        # Поле ввода
+        spinbox = NoWheelSpinBox()
+        spinbox.setRange(0, 1e9)
+        layout.addWidget(spinbox)
+        
+        # Метка с единицей измерения
+        unit_label = QLabel(unit_text)
+        unit_label.setProperty("cssClass", "unit")
+        layout.addWidget(unit_label)
+        
+        layout.addStretch()
+        
+        return widget, spinbox
+
     def setup_input_tab(self):
         layout = QVBoxLayout(self.input_tab)
         layout.setSpacing(10)
@@ -255,129 +316,78 @@ class EconomicCalculator(QMainWindow):
 
         # Группа 1: Трудозатраты
         group_tu = QGroupBox("Трудозатраты (чел-час)")
-        group_tu_layout = QFormLayout(group_tu)
+        group_tu_layout = QVBoxLayout(group_tu)
         group_tu_layout.setSpacing(8)
 
-        self.tu = NoWheelDoubleSpinBox()
-        self.tu.setRange(0, 1e9)
-        self.tu.setValue(194.4)
-        self.tu.setToolTip("Затраты времени на исследование алгоритма")
-        group_tu_layout.addRow("Исследование алгоритма (tu):", self.tu)
+        # Создаём строки с единицами измерения
+        row1, self.tu = self.create_input_row("Исследование алгоритма (tu):", "(чел-час)")
+        group_tu_layout.addWidget(row1)
 
-        self.ta = NoWheelDoubleSpinBox()
-        self.ta.setRange(0, 1e9)
-        self.ta.setValue(185.14)
-        self.ta.setToolTip("Затраты времени на разработку блок-схемы")
-        group_tu_layout.addRow("Разработка блок-схемы (ta):", self.ta)
+        row2, self.ta = self.create_input_row("Разработка блок-схемы (ta):", "(чел-час)")
+        group_tu_layout.addWidget(row2)
 
-        self.tn = NoWheelDoubleSpinBox()
-        self.tn.setRange(0, 1e9)
-        self.tn.setValue(204.69)
-        self.tn.setToolTip("Затраты времени на программирование")
-        group_tu_layout.addRow("Программирование (tn):", self.tn)
+        row3, self.tn = self.create_input_row("Программирование (tn):", "(чел-час)")
+        group_tu_layout.addWidget(row3)
 
-        self.toml = NoWheelDoubleSpinBox()
-        self.toml.setRange(0, 1e9)
-        self.toml.setValue(288.0)
-        self.toml.setToolTip("Затраты времени на отладку программы")
-        group_tu_layout.addRow("Отладка программы (toml):", self.toml)
+        row4, self.toml = self.create_input_row("Отладка программы (toml):", "(чел-час)")
+        group_tu_layout.addWidget(row4)
 
-        self.td = NoWheelDoubleSpinBox()
-        self.td.setRange(0, 1e9)
-        self.td.setValue(151.2)
-        self.td.setToolTip("Затраты времени на подготовку документации")
-        group_tu_layout.addRow("Подготовка документации (td):", self.td)
+        row5, self.td = self.create_input_row("Подготовка документации (td):", "(чел-час)")
+        group_tu_layout.addWidget(row5)
 
         form_layout.addWidget(group_tu)
 
         # Группа 2: Финансовые параметры
         group_fin = QGroupBox("Финансовые параметры")
-        group_fin_layout = QFormLayout(group_fin)
+        group_fin_layout = QVBoxLayout(group_fin)
         group_fin_layout.setSpacing(8)
 
-        self.hourly_rate = NoWheelDoubleSpinBox()
-        self.hourly_rate.setRange(0, 1e9)
-        self.hourly_rate.setValue(238.1)
-        self.hourly_rate.setToolTip("Среднечасовая оплата труда разработчика")
-        group_fin_layout.addRow("Среднечасовая оплата (руб/час):", self.hourly_rate)
+        row6, self.hourly_rate = self.create_input_row("Среднечасовая оплата (руб/час):", "(руб/час)")
+        group_fin_layout.addWidget(row6)
 
-        self.insurance = NoWheelDoubleSpinBox()
-        self.insurance.setRange(0, 1e9)
-        self.insurance.setValue(1.3)
-        self.insurance.setSingleStep(0.05)
-        self.insurance.setToolTip("Коэффициент, учитывающий страховые взносы")
-        group_fin_layout.addRow("Коэф. страховых взносов:", self.insurance)
+        row7, self.insurance = self.create_input_row("Коэф. страховых взносов:", "(коэф.)")
+        group_fin_layout.addWidget(row7)
 
-        self.machine_hour = NoWheelDoubleSpinBox()
-        self.machine_hour.setRange(0, 1e9)
-        self.machine_hour.setValue(21.05)
-        self.machine_hour.setToolTip("Стоимость одного машино-часа работы ПК")
-        group_fin_layout.addRow("Стоимость машино-часа (руб):", self.machine_hour)
+        row8, self.machine_hour = self.create_input_row("Стоимость машино-часа (руб):", "(руб/час)")
+        group_fin_layout.addWidget(row8)
 
-        self.electricity = NoWheelDoubleSpinBox()
-        self.electricity.setRange(0, 1e9)
-        self.electricity.setValue(7.28)
-        self.electricity.setToolTip("Стоимость 1 кВт·ч электроэнергии")
-        group_fin_layout.addRow("Стоимость электроэнергии (руб/кВт·ч):", self.electricity)
+        row9, self.electricity = self.create_input_row("Стоимость электроэнергии (руб/кВт·ч):", "(руб/кВт·ч)")
+        group_fin_layout.addWidget(row9)
 
-        self.power = NoWheelDoubleSpinBox()
-        self.power.setRange(0, 1e9)
-        self.power.setValue(0.5)
-        self.power.setSingleStep(0.05)
-        self.power.setToolTip("Мощность, потребляемая ПК (кВт)")
-        group_fin_layout.addRow("Мощность ПК (кВт):", self.power)
+        row10, self.power = self.create_input_row("Мощность ПК (кВт):", "(кВт)")
+        group_fin_layout.addWidget(row10)
 
         form_layout.addWidget(group_fin)
 
         # Группа 3: Базовый вариант
         group_base = QGroupBox("Базовый вариант")
-        group_base_layout = QFormLayout(group_base)
+        group_base_layout = QVBoxLayout(group_base)
         group_base_layout.setSpacing(8)
 
-        self.work_hours = NoWheelDoubleSpinBox()
-        self.work_hours.setRange(0, 1e9)
-        self.work_hours.setValue(2112)
-        self.work_hours.setToolTip("Годовой фонд рабочего времени")
-        group_base_layout.addRow("Фонд рабочего времени (час/год):", self.work_hours)
+        row11, self.work_hours = self.create_input_row("Фонд рабочего времени (час/год):", "(час/год)")
+        group_base_layout.addWidget(row11)
 
-        self.labor_intensity = NoWheelDoubleSpinBox()
-        self.labor_intensity.setRange(0, 1e9)
-        self.labor_intensity.setValue(39)
-        self.labor_intensity.setToolTip("Трудоёмкость решаемой задачи в % от общего времени")
-        group_base_layout.addRow("Трудоёмкость задачи (%):", self.labor_intensity)
+        row12, self.labor_intensity = self.create_input_row("Трудоёмкость задачи (%):", "(%)")
+        group_base_layout.addWidget(row12)
 
-        self.salary_share = NoWheelDoubleSpinBox()
-        self.salary_share.setRange(0, 1e9)
-        self.salary_share.setValue(0.5)
-        self.salary_share.setSingleStep(0.05)
-        self.salary_share.setToolTip("Доля заработной платы в общей смете затрат")
-        group_base_layout.addRow("Доля зарплаты в смете:", self.salary_share)
+        row13, self.salary_share = self.create_input_row("Доля зарплаты в смете:", "(доля)")
+        group_base_layout.addWidget(row13)
 
         form_layout.addWidget(group_base)
 
         # Группа 4: Амортизация
         group_amort = QGroupBox("Амортизация")
-        group_amort_layout = QFormLayout(group_amort)
+        group_amort_layout = QVBoxLayout(group_amort)
         group_amort_layout.setSpacing(8)
 
-        self.useful_life = NoWheelSpinBox()
-        self.useful_life.setRange(0, 1e9)
-        self.useful_life.setValue(6)
-        self.useful_life.setToolTip("Срок полезного использования ПО (лет)")
-        group_amort_layout.addRow("Срок полезного использования (лет):", self.useful_life)
+        row14, self.useful_life = self.create_int_input_row("Срок полезного использования (лет):", "(лет)")
+        group_amort_layout.addWidget(row14)
 
-        self.depreciation_rate = NoWheelDoubleSpinBox()
-        self.depreciation_rate.setRange(0, 1e9)
-        self.depreciation_rate.setValue(16.67)
-        self.depreciation_rate.setSingleStep(0.01)
-        self.depreciation_rate.setToolTip("Годовая норма амортизации (%)")
-        group_amort_layout.addRow("Норма амортизации (%):", self.depreciation_rate)
+        row15, self.depreciation_rate = self.create_input_row("Норма амортизации (%):", "(%)")
+        group_amort_layout.addWidget(row15)
 
-        self.pc_cost = NoWheelDoubleSpinBox()
-        self.pc_cost.setRange(0, 1e9)
-        self.pc_cost.setValue(129600)
-        self.pc_cost.setToolTip("Стоимость компьютера (руб)")
-        group_amort_layout.addRow("Стоимость ПК (руб):", self.pc_cost)
+        row16, self.pc_cost = self.create_input_row("Стоимость ПК (руб):", "(руб)")
+        group_amort_layout.addWidget(row16)
 
         form_layout.addWidget(group_amort)
         form_layout.addStretch()
