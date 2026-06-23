@@ -24,6 +24,8 @@ class TestWindow(QMainWindow):
     def on_click(self):
         self.label.setText("✅ Всё работает!")
 
+
+#комментарий от Артёма
 app = QApplication(sys.argv)
 window = TestWindow()
 window.show()
