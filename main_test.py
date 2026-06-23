@@ -22,7 +22,7 @@ class TestWindow(QMainWindow):
         layout.addWidget(button)
     
     def on_click(self):
-        self.label.setText("✅ Всё работает!")
+        self.label.setText("✅ Всё работает!") #komment Vani
 
 app = QApplication(sys.argv)
 window = TestWindow()
