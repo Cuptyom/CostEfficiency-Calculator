@@ -85,55 +85,6 @@ class EconomicCalculator(QMainWindow):
             return self.locale.toString(value)
         return self.locale.toString(round(value), 'f', 0)
 
-    def format_with_indices(self, text):
-        """Заменяет имена переменных на HTML с подстрочными индексами."""
-        # Словарь замен: ключ -> значение с <sub>
-        replacements = {
-            'tu': 't<sub>u</sub>',
-            'ta': 't<sub>a</sub>',
-            'tn': 't<sub>n</sub>',
-            'toml': 't<sub>oml</sub>',
-            'td': 't<sub>d</sub>',
-            'Зот': 'З<sub>от</sub>',
-            'Змв': 'З<sub>мв</sub>',
-            'Зэл': 'З<sub>эл</sub>',
-            'Зпр': 'З<sub>пр</sub>',
-            'Зрп': 'З<sub>рп</sub>',
-            'Ад': 'А<sub>д</sub>',
-            'Тр': 'Т<sub>р</sub>',
-            'Зб': 'З<sub>б</sub>',
-            'Зп.п': 'З<sub>п.п</sub>',
-            'Ток': 'Т<sub>ок</sub>',
-            'Робщ': 'Р<sub>общ</sub>',
-            'Сч': 'С<sub>ч</sub>',
-            'кспр': 'к<sub>спр</sub>',
-            'Смч': 'С<sub>мч</sub>',
-            'Цэл': 'Ц<sub>эл</sub>',
-            'Тп.к': 'Т<sub>п.к</sub>',
-            'Нтр': 'Н<sub>тр</sub>',
-            'Дз.п': 'Д<sub>з.п</sub>',
-            'Тг': 'Т<sub>г</sub>',
-            'См': 'С<sub>м</sub>',
-            'Зобщ': 'З<sub>общ</sub>',
-            'Тс': 'Т<sub>с</sub>',
-            'Сбал': 'С<sub>бал</sub>',
-            'На': 'Н<sub>а</sub>',
-            'Е': 'Е',  # без индекса
-            'Э': 'Э',  # без индекса
-            'Р': 'Р',  # без индекса
-            'T': 'T',  # без индекса
-        }
-        # Сортируем по длине ключа, чтобы сначала заменялись более длинные (например, "Зп.п" до "Зп")
-        for key in sorted(replacements.keys(), key=len, reverse=True):
-            # Заменяем только целые слова (границы слова)
-            # Используем регулярное выражение, но проще сделать замену с пробелами и знаками препинания
-            # Для простоты заменим все вхождения, но учтем, что могут быть числа и знаки
-            # Будем заменять key на value, только если перед и после не буква или цифра
-            import re
-            pattern = r'(?<![A-Za-zА-Яа-я0-9])' + re.escape(key) + r'(?![A-Za-zА-Яа-я0-9])'
-            text = re.sub(pattern, replacements[key], text)
-        return text
-
     def apply_styles(self):
         style = """
         QWidget {
@@ -178,18 +129,21 @@ class EconomicCalculator(QMainWindow):
             background: qlineargradient(x1:0, y1:0, x2:0, y2:1,
                                         stop:0 #2b4fc7, stop:1 #1e3a9e);
         }
+        /* Стили для спинбоксов - убираем кнопки-стрелки */
         NoWheelDoubleSpinBox, NoWheelSpinBox {
             background-color: white;
             border: 1px solid #ccd4e0;
             border-radius: 6px;
             padding: 5px 10px;
             min-height: 28px;
-            min-width: 120px;
+            min-width: 100px;
+            max-width: 150px;
         }
         NoWheelDoubleSpinBox:focus, NoWheelSpinBox:focus {
             border: 2px solid #5b7cfa;
             background-color: #f4f7ff;
         }
+        /* Скрываем кнопки-стрелки */
         NoWheelDoubleSpinBox::up-button, NoWheelSpinBox::up-button,
         NoWheelDoubleSpinBox::down-button, NoWheelSpinBox::down-button {
             width: 0px;
@@ -200,6 +154,14 @@ class EconomicCalculator(QMainWindow):
         NoWheelDoubleSpinBox::down-arrow, NoWheelSpinBox::down-arrow {
             width: 0px;
             height: 0px;
+        }
+        /* Стиль для меток единиц измерения */
+        QLabel[cssClass="unit"] {
+            color: #5b7cfa;
+            font-weight: bold;
+            font-size: 10pt;
+            padding: 0 5px;
+            min-width: 40px;
         }
         QTabWidget::pane {
             border: 1px solid #c8d0db;
@@ -246,7 +208,7 @@ class EconomicCalculator(QMainWindow):
         QMessageBox {
             background-color: white;
         }
-        QLabel.formula-label {
+        QTextEdit {
             background-color: #f8f9fc;
             border: 1px solid #d0d8e6;
             border-radius: 6px;
@@ -255,11 +217,11 @@ class EconomicCalculator(QMainWindow):
             font-size: 10pt;
             color: #1f2a44;
         }
-        QLabel.formula-label:focus {
+        QTextEdit:focus {
             border: 2px solid #5b7cfa;
             background-color: #f4f7ff;
         }
-        QLabel.formula-label[cssClass="result"] {
+        QTextEdit[cssClass="result"] {
             background-color: #eef3ff;
             border: 2px solid #5b7cfa;
             font-weight: bold;
@@ -267,6 +229,58 @@ class EconomicCalculator(QMainWindow):
         }
         """
         self.setStyleSheet(style)
+
+    def create_input_row(self, label_text, unit_text):
+        """Создаёт строку с меткой, полем ввода и единицей измерения"""
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.setSpacing(5)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Метка с названием
+        label = QLabel(label_text)
+        label.setMinimumWidth(250)
+        layout.addWidget(label)
+        
+        # Поле ввода
+        spinbox = NoWheelDoubleSpinBox()
+        spinbox.setRange(0, 1e9)
+        layout.addWidget(spinbox)
+        
+        # Метка с единицей измерения
+        unit_label = QLabel(unit_text)
+        unit_label.setProperty("cssClass", "unit")
+        layout.addWidget(unit_label)
+        
+        layout.addStretch()
+        
+        return widget, spinbox
+
+    def create_int_input_row(self, label_text, unit_text):
+        """Создаёт строку с меткой, целочисленным полем ввода и единицей измерения"""
+        widget = QWidget()
+        layout = QHBoxLayout(widget)
+        layout.setSpacing(5)
+        layout.setContentsMargins(0, 0, 0, 0)
+        
+        # Метка с названием
+        label = QLabel(label_text)
+        label.setMinimumWidth(250)
+        layout.addWidget(label)
+        
+        # Поле ввода
+        spinbox = NoWheelSpinBox()
+        spinbox.setRange(0, 1e9)
+        layout.addWidget(spinbox)
+        
+        # Метка с единицей измерения
+        unit_label = QLabel(unit_text)
+        unit_label.setProperty("cssClass", "unit")
+        layout.addWidget(unit_label)
+        
+        layout.addStretch()
+        
+        return widget, spinbox
 
     def setup_input_tab(self):
         layout = QVBoxLayout(self.input_tab)
@@ -302,129 +316,78 @@ class EconomicCalculator(QMainWindow):
 
         # Группа 1: Трудозатраты
         group_tu = QGroupBox("Трудозатраты (чел-час)")
-        group_tu_layout = QFormLayout(group_tu)
+        group_tu_layout = QVBoxLayout(group_tu)
         group_tu_layout.setSpacing(8)
 
-        self.tu = NoWheelDoubleSpinBox()
-        self.tu.setRange(0, 1e9)
-        self.tu.setValue(194.4)
-        self.tu.setToolTip("Затраты времени на исследование алгоритма")
-        group_tu_layout.addRow("Исследование алгоритма (tu):", self.tu)
+        # Создаём строки с единицами измерения
+        row1, self.tu = self.create_input_row("Исследование алгоритма (tu):", "(чел-час)")
+        group_tu_layout.addWidget(row1)
 
-        self.ta = NoWheelDoubleSpinBox()
-        self.ta.setRange(0, 1e9)
-        self.ta.setValue(185.14)
-        self.ta.setToolTip("Затраты времени на разработку блок-схемы")
-        group_tu_layout.addRow("Разработка блок-схемы (ta):", self.ta)
+        row2, self.ta = self.create_input_row("Разработка блок-схемы (ta):", "(чел-час)")
+        group_tu_layout.addWidget(row2)
 
-        self.tn = NoWheelDoubleSpinBox()
-        self.tn.setRange(0, 1e9)
-        self.tn.setValue(204.69)
-        self.tn.setToolTip("Затраты времени на программирование")
-        group_tu_layout.addRow("Программирование (tn):", self.tn)
+        row3, self.tn = self.create_input_row("Программирование (tn):", "(чел-час)")
+        group_tu_layout.addWidget(row3)
 
-        self.toml = NoWheelDoubleSpinBox()
-        self.toml.setRange(0, 1e9)
-        self.toml.setValue(288.0)
-        self.toml.setToolTip("Затраты времени на отладку программы")
-        group_tu_layout.addRow("Отладка программы (toml):", self.toml)
+        row4, self.toml = self.create_input_row("Отладка программы (toml):", "(чел-час)")
+        group_tu_layout.addWidget(row4)
 
-        self.td = NoWheelDoubleSpinBox()
-        self.td.setRange(0, 1e9)
-        self.td.setValue(151.2)
-        self.td.setToolTip("Затраты времени на подготовку документации")
-        group_tu_layout.addRow("Подготовка документации (td):", self.td)
+        row5, self.td = self.create_input_row("Подготовка документации (td):", "(чел-час)")
+        group_tu_layout.addWidget(row5)
 
         form_layout.addWidget(group_tu)
 
         # Группа 2: Финансовые параметры
         group_fin = QGroupBox("Финансовые параметры")
-        group_fin_layout = QFormLayout(group_fin)
+        group_fin_layout = QVBoxLayout(group_fin)
         group_fin_layout.setSpacing(8)
 
-        self.hourly_rate = NoWheelDoubleSpinBox()
-        self.hourly_rate.setRange(0, 1e9)
-        self.hourly_rate.setValue(238.1)
-        self.hourly_rate.setToolTip("Среднечасовая оплата труда разработчика")
-        group_fin_layout.addRow("Среднечасовая оплата (руб/час):", self.hourly_rate)
+        row6, self.hourly_rate = self.create_input_row("Среднечасовая оплата (руб/час):", "(руб/час)")
+        group_fin_layout.addWidget(row6)
 
-        self.insurance = NoWheelDoubleSpinBox()
-        self.insurance.setRange(0, 1e9)
-        self.insurance.setValue(1.3)
-        self.insurance.setSingleStep(0.05)
-        self.insurance.setToolTip("Коэффициент, учитывающий страховые взносы")
-        group_fin_layout.addRow("Коэф. страховых взносов:", self.insurance)
+        row7, self.insurance = self.create_input_row("Коэф. страховых взносов:", "(коэф.)")
+        group_fin_layout.addWidget(row7)
 
-        self.machine_hour = NoWheelDoubleSpinBox()
-        self.machine_hour.setRange(0, 1e9)
-        self.machine_hour.setValue(21.05)
-        self.machine_hour.setToolTip("Стоимость одного машино-часа работы ПК")
-        group_fin_layout.addRow("Стоимость машино-часа (руб):", self.machine_hour)
+        row8, self.machine_hour = self.create_input_row("Стоимость машино-часа (руб):", "(руб/час)")
+        group_fin_layout.addWidget(row8)
 
-        self.electricity = NoWheelDoubleSpinBox()
-        self.electricity.setRange(0, 1e9)
-        self.electricity.setValue(7.28)
-        self.electricity.setToolTip("Стоимость 1 кВт·ч электроэнергии")
-        group_fin_layout.addRow("Стоимость электроэнергии (руб/кВт·ч):", self.electricity)
+        row9, self.electricity = self.create_input_row("Стоимость электроэнергии (руб/кВт·ч):", "(руб/кВт·ч)")
+        group_fin_layout.addWidget(row9)
 
-        self.power = NoWheelDoubleSpinBox()
-        self.power.setRange(0, 1e9)
-        self.power.setValue(0.5)
-        self.power.setSingleStep(0.05)
-        self.power.setToolTip("Мощность, потребляемая ПК (кВт)")
-        group_fin_layout.addRow("Мощность ПК (кВт):", self.power)
+        row10, self.power = self.create_input_row("Мощность ПК (кВт):", "(кВт)")
+        group_fin_layout.addWidget(row10)
 
         form_layout.addWidget(group_fin)
 
         # Группа 3: Базовый вариант
         group_base = QGroupBox("Базовый вариант")
-        group_base_layout = QFormLayout(group_base)
+        group_base_layout = QVBoxLayout(group_base)
         group_base_layout.setSpacing(8)
 
-        self.work_hours = NoWheelDoubleSpinBox()
-        self.work_hours.setRange(0, 1e9)
-        self.work_hours.setValue(2112)
-        self.work_hours.setToolTip("Годовой фонд рабочего времени")
-        group_base_layout.addRow("Фонд рабочего времени (час/год):", self.work_hours)
+        row11, self.work_hours = self.create_input_row("Фонд рабочего времени (час/год):", "(час/год)")
+        group_base_layout.addWidget(row11)
 
-        self.labor_intensity = NoWheelDoubleSpinBox()
-        self.labor_intensity.setRange(0, 1e9)
-        self.labor_intensity.setValue(39)
-        self.labor_intensity.setToolTip("Трудоёмкость решаемой задачи в % от общего времени")
-        group_base_layout.addRow("Трудоёмкость задачи (%):", self.labor_intensity)
+        row12, self.labor_intensity = self.create_input_row("Трудоёмкость задачи (%):", "(%)")
+        group_base_layout.addWidget(row12)
 
-        self.salary_share = NoWheelDoubleSpinBox()
-        self.salary_share.setRange(0, 1e9)
-        self.salary_share.setValue(0.5)
-        self.salary_share.setSingleStep(0.05)
-        self.salary_share.setToolTip("Доля заработной платы в общей смете затрат")
-        group_base_layout.addRow("Доля зарплаты в смете:", self.salary_share)
+        row13, self.salary_share = self.create_input_row("Доля зарплаты в смете:", "(доля)")
+        group_base_layout.addWidget(row13)
 
         form_layout.addWidget(group_base)
 
         # Группа 4: Амортизация
         group_amort = QGroupBox("Амортизация")
-        group_amort_layout = QFormLayout(group_amort)
+        group_amort_layout = QVBoxLayout(group_amort)
         group_amort_layout.setSpacing(8)
 
-        self.useful_life = NoWheelSpinBox()
-        self.useful_life.setRange(0, 1e9)
-        self.useful_life.setValue(6)
-        self.useful_life.setToolTip("Срок полезного использования ПО (лет)")
-        group_amort_layout.addRow("Срок полезного использования (лет):", self.useful_life)
+        row14, self.useful_life = self.create_int_input_row("Срок полезного использования (лет):", "(лет)")
+        group_amort_layout.addWidget(row14)
 
-        self.depreciation_rate = NoWheelDoubleSpinBox()
-        self.depreciation_rate.setRange(0, 1e9)
-        self.depreciation_rate.setValue(16.67)
-        self.depreciation_rate.setSingleStep(0.01)
-        self.depreciation_rate.setToolTip("Годовая норма амортизации (%)")
-        group_amort_layout.addRow("Норма амортизации (%):", self.depreciation_rate)
+        row15, self.depreciation_rate = self.create_input_row("Норма амортизации (%):", "(%)")
+        group_amort_layout.addWidget(row15)
 
-        self.pc_cost = NoWheelDoubleSpinBox()
-        self.pc_cost.setRange(0, 1e9)
-        self.pc_cost.setValue(129600)
-        self.pc_cost.setToolTip("Стоимость компьютера (руб)")
-        group_amort_layout.addRow("Стоимость ПК (руб):", self.pc_cost)
+        row16, self.pc_cost = self.create_input_row("Стоимость ПК (руб):", "(руб)")
+        group_amort_layout.addWidget(row16)
 
         form_layout.addWidget(group_amort)
         form_layout.addStretch()
@@ -480,321 +443,362 @@ class EconomicCalculator(QMainWindow):
         clipboard.setText(self.results_text)
         QMessageBox.information(self, "Готово", "Результаты скопированы в буфер обмена.")
 
-    def create_formula_label(self, text, tooltip="", is_result=False):
-        """Создаёт QLabel с HTML и возможностью выделения для копирования."""
-        label = QLabel()
-        label.setText(text)
-        label.setWordWrap(True)
-        label.setTextInteractionFlags(Qt.TextSelectableByMouse)
-        label.setProperty("cssClass", "result" if is_result else "formula-label")
-        if tooltip:
-            label.setToolTip(tooltip)
-        # Применим стиль из QSS
-        return label
+    def create_copyable_field(self, text, tooltip="", is_result=False):
+        """Создаёт поле QTextEdit для выделения и копирования"""
+        text_edit = QTextEdit()
+        text_edit.setPlainText(text)
+        text_edit.setReadOnly(True)
+
+        if is_result:
+            text_edit.setMaximumHeight(50)
+            text_edit.setProperty("cssClass", "result")
+            text_edit.setToolTip(tooltip if tooltip else "Выделите результат и скопируйте (Ctrl+C)")
+        else:
+            text_edit.setMaximumHeight(50)
+            text_edit.setToolTip(tooltip if tooltip else "Выделите текст и скопируйте (Ctrl+C)")
+
+        return text_edit
+
+    def safe_divide(self, numerator, denominator):
+        """Безопасное деление с проверкой на ноль"""
+        if denominator == 0:
+            return float('inf')
+        return numerator / denominator
 
     def calculate(self):
-        # Сбор данных
-        tu = self.tu.value()
-        ta = self.ta.value()
-        tn = self.tn.value()
-        toml = self.toml.value()
-        td = self.td.value()
+        try:
+            # Сбор данных
+            tu = self.tu.value()
+            ta = self.ta.value()
+            tn = self.tn.value()
+            toml = self.toml.value()
+            td = self.td.value()
 
-        hourly = self.hourly_rate.value()
-        insurance = self.insurance.value()
-        machine_hour = self.machine_hour.value()
-        electricity = self.electricity.value()
-        power = self.power.value()
+            hourly = self.hourly_rate.value()
+            insurance = self.insurance.value()
+            machine_hour = self.machine_hour.value()
+            electricity = self.electricity.value()
+            power = self.power.value()
 
-        work_hours = self.work_hours.value()
-        labor_intensity = self.labor_intensity.value()
-        salary_share = self.salary_share.value()
+            work_hours = self.work_hours.value()
+            labor_intensity = self.labor_intensity.value()
+            salary_share = self.salary_share.value()
 
-        useful_life = self.useful_life.value()
-        dep_rate = self.depreciation_rate.value()
-        pc_cost = self.pc_cost.value()
+            useful_life = self.useful_life.value()
+            dep_rate = self.depreciation_rate.value()
+            pc_cost = self.pc_cost.value()
 
-        # Расчёты (по формулам из ПЗ)
-        T = tu + ta + tn + toml + td
-        Z_ot = T * hourly * insurance
-        Z_mv = machine_hour * (tn + toml)
-        Z_el = electricity * power * (tn + toml + td)
-        Z_pr = 0.05 * (Z_ot + Z_mv + Z_el)
-        Z_rp = Z_ot + Z_mv + Z_el + Z_pr
-        A = (dep_rate / 100) * Z_rp
-        total_expenses = Z_rp + A
+            # Проверка критических значений
+            if salary_share == 0:
+                QMessageBox.warning(self, "Ошибка", "Доля зарплаты в смете не может быть равна нулю!")
+                return
+            
+            if useful_life == 0:
+                QMessageBox.warning(self, "Ошибка", "Срок полезного использования не может быть равен нулю!")
+                return
 
-        T_r = work_hours * (labor_intensity / 100)
-        Z_b = hourly * T_r * (1 / salary_share)
-        Z_pp = (work_hours * machine_hour + total_expenses) / useful_life
-        E = Z_b - Z_pp
-        R_total = pc_cost + total_expenses
-        T_ok = R_total / E if E > 0 else float('inf')
-        E_eff = E / R_total if R_total > 0 else 0
+            # Расчёты (по формулам из ПЗ)
+            T = tu + ta + tn + toml + td
+            Z_ot = T * hourly * insurance
+            Z_mv = machine_hour * (tn + toml)
+            Z_el = electricity * power * (tn + toml + td)
+            Z_pr = 0.05 * (Z_ot + Z_mv + Z_el)
+            Z_rp = Z_ot + Z_mv + Z_el + Z_pr
+            A = (dep_rate / 100) * Z_rp
+            total_expenses = Z_rp + A
 
-        # Вспомогательная функция для форматирования чисел
-        def fmt(v):
-            return self.format_number(v)
+            T_r = work_hours * (labor_intensity / 100)
+            Z_b = hourly * T_r * (1 / salary_share)
+            Z_pp = (work_hours * machine_hour + total_expenses) / useful_life
+            E = Z_b - Z_pp
+            R_total = pc_cost + total_expenses
+            
+            # Безопасное деление
+            T_ok = self.safe_divide(R_total, E) if E > 0 else float('inf')
+            E_eff = self.safe_divide(E, R_total) if R_total > 0 else 0
 
-        def fmt_int(v):
-            return self.format_number_no_decimals(v)
+            # Вспомогательная функция для форматирования
+            def fmt(v):
+                return self.format_number(v)
+            
+            def fmt_int(v):
+                return self.format_number_no_decimals(v)
 
-        # Форматирование с индексами (только для UI)
-        def fmt_idx(text):
-            return self.format_with_indices(text)
+            # Формируем текст для копирования (весь отчёт)
+            lines = []
+            lines.append("="*60)
+            lines.append("РЕЗУЛЬТАТЫ РАСЧЁТА ЭКОНОМИЧЕСКОЙ ЭФФЕКТИВНОСТИ")
+            lines.append("="*60)
 
-        # Формируем текст для копирования (без индексов, плоский)
-        lines = []
-        lines.append("="*60)
-        lines.append("РЕЗУЛЬТАТЫ РАСЧЁТА ЭКОНОМИЧЕСКОЙ ЭФФЕКТИВНОСТИ")
-        lines.append("="*60)
+            def add_to_copy(name, general, subst, value, unit=""):
+                if value == float('inf'):
+                    val_str = "∞ (деление на ноль)"
+                else:
+                    val_str = fmt(value)
+                    if unit:
+                        val_str += f" {unit}"
+                lines.append(f"\n{name}")
+                lines.append(f"  {general}")
+                lines.append(f"  {subst}")
+                lines.append(f"  Результат: {val_str}")
+                lines.append("-"*40)
 
-        def add_to_copy(name, general, subst, value, unit=""):
-            val_str = fmt(value)
-            if unit:
-                val_str += f" {unit}"
-            lines.append(f"\n{name}")
-            lines.append(f"  {general}")
-            lines.append(f"  {subst}")
-            lines.append(f"  Результат: {val_str}")
-            lines.append("-"*40)
+            add_to_copy("1. Общие трудозатраты",
+                        "T = tu + ta + tn + toml + td",
+                        f"T = {fmt(tu)} + {fmt(ta)} + {fmt(tn)} + {fmt(toml)} + {fmt(td)} = {fmt(T)}",
+                        T, "чел-час")
 
-        add_to_copy("1. Общие трудозатраты",
-                    "T = tu + ta + tn + toml + td",
-                    f"T = {fmt(tu)} + {fmt(ta)} + {fmt(tn)} + {fmt(toml)} + {fmt(td)} = {fmt(T)}",
-                    T, "чел-час")
+            add_to_copy("2. Расходы на оплату труда и страховые взносы",
+                        "Зот = T × Сч × кспр",
+                        f"Зот = {fmt(T)} × {fmt(hourly)} × {fmt(insurance)} = {fmt(Z_ot)}",
+                        Z_ot, "руб")
 
-        add_to_copy("2. Расходы на оплату труда и страховые взносы",
-                    "Зот = T × Сч × кспр",
-                    f"Зот = {fmt(T)} × {fmt(hourly)} × {fmt(insurance)} = {fmt(Z_ot)}",
-                    Z_ot, "руб")
+            add_to_copy("3. Затраты на машинное время",
+                        "Змв = Смч × (tn + toml)",
+                        f"Змв = {fmt(machine_hour)} × ({fmt(tn)} + {fmt(toml)}) = {fmt(Z_mv)}",
+                        Z_mv, "руб")
 
-        add_to_copy("3. Затраты на машинное время",
-                    "Змв = Смч × (tn + toml)",
-                    f"Змв = {fmt(machine_hour)} × ({fmt(tn)} + {fmt(toml)}) = {fmt(Z_mv)}",
-                    Z_mv, "руб")
+            add_to_copy("4. Затраты на электроэнергию",
+                        "Зэл = Цэл × Р × (tn + toml + td)",
+                        f"Зэл = {fmt(electricity)} × {fmt(power)} × ({fmt(tn)} + {fmt(toml)} + {fmt(td)}) = {fmt(Z_el)}",
+                        Z_el, "руб")
 
-        add_to_copy("4. Затраты на электроэнергию",
-                    "Зэл = Цэл × Р × (tn + toml + td)",
-                    f"Зэл = {fmt(electricity)} × {fmt(power)} × ({fmt(tn)} + {fmt(toml)} + {fmt(td)}) = {fmt(Z_el)}",
-                    Z_el, "руб")
+            add_to_copy("5. Прочие затраты",
+                        "Зпр = 5% × (Зот + Змв + Зэл)",
+                        f"Зпр = 0.05 × ({fmt(Z_ot)} + {fmt(Z_mv)} + {fmt(Z_el)}) = {fmt(Z_pr)}",
+                        Z_pr, "руб")
 
-        add_to_copy("5. Прочие затраты",
-                    "Зпр = 5% × (Зот + Змв + Зэл)",
-                    f"Зпр = 0.05 × ({fmt(Z_ot)} + {fmt(Z_mv)} + {fmt(Z_el)}) = {fmt(Z_pr)}",
-                    Z_pr, "руб")
+            add_to_copy("6. Затраты на разработку",
+                        "Зрп = Зот + Змв + Зэл + Зпр",
+                        f"Зрп = {fmt(Z_ot)} + {fmt(Z_mv)} + {fmt(Z_el)} + {fmt(Z_pr)} = {fmt(Z_rp)}",
+                        Z_rp, "руб")
 
-        add_to_copy("6. Затраты на разработку",
-                    "Зрп = Зот + Змв + Зэл + Зпр",
-                    f"Зрп = {fmt(Z_ot)} + {fmt(Z_mv)} + {fmt(Z_el)} + {fmt(Z_pr)} = {fmt(Z_rp)}",
-                    Z_rp, "руб")
+            add_to_copy("7. Амортизация",
+                        "Ад = (На × Зрп) / 100",
+                        f"Ад = ({fmt(dep_rate)} × {fmt(Z_rp)}) / 100 = {fmt(A)}",
+                        A, "руб/год")
 
-        add_to_copy("7. Амортизация",
-                    "Ад = (На × Зрп) / 100",
-                    f"Ад = ({fmt(dep_rate)} × {fmt(Z_rp)}) / 100 = {fmt(A)}",
-                    A, "руб/год")
+            add_to_copy("8. Трудоёмкость задачи",
+                        "Тр = Тп.к × Нтр / 100",
+                        f"Тр = {fmt(work_hours)} × {fmt(labor_intensity)} / 100 = {fmt(T_r)}",
+                        T_r, "час/год")
 
-        add_to_copy("8. Трудоёмкость задачи",
-                    "Тр = Тп.к × Нтр / 100",
-                    f"Тр = {fmt(work_hours)} × {fmt(labor_intensity)} / 100 = {fmt(T_r)}",
-                    T_r, "час/год")
+            add_to_copy("9. Затраты по базовому варианту",
+                        "Зб = Сч × Тр × (1 / Дз.п)",
+                        f"Зб = {fmt(hourly)} × {fmt(T_r)} × (1 / {fmt(salary_share)}) = {fmt(Z_b)}",
+                        Z_b, "руб/год")
 
-        add_to_copy("9. Затраты по базовому варианту",
-                    "Зб = Сч × Тр × (1 / Дз.п)",
-                    f"Зб = {fmt(hourly)} × {fmt(T_r)} × (1 / {fmt(salary_share)}) = {fmt(Z_b)}",
-                    Z_b, "руб/год")
+            add_to_copy("10. Затраты при использовании ПО",
+                        "Зп.п = (Тг × См + Зобщ) / Тс, где Зобщ = Зрп + Ад",
+                        f"Зп.п = ({fmt(work_hours)} × {fmt(machine_hour)} + {fmt(total_expenses)}) / {fmt_int(useful_life)} = {fmt(Z_pp)}",
+                        Z_pp, "руб/год")
 
-        add_to_copy("10. Затраты при использовании ПО",
-                    "Зп.п = (Тг × См + Зобщ) / Тс, где Зобщ = Зрп + Ад",
-                    f"Зп.п = ({fmt(work_hours)} × {fmt(machine_hour)} + {fmt(total_expenses)}) / {fmt_int(useful_life)} = {fmt(Z_pp)}",
-                    Z_pp, "руб/год")
+            add_to_copy("11. Экономическая эффективность",
+                        "Э = Зб - Зп.п",
+                        f"Э = {fmt(Z_b)} - {fmt(Z_pp)} = {fmt(E)}",
+                        E, "руб/год")
 
-        add_to_copy("11. Экономическая эффективность",
-                    "Э = Зб - Зп.п",
-                    f"Э = {fmt(Z_b)} - {fmt(Z_pp)} = {fmt(E)}",
-                    E, "руб/год")
+            if T_ok != float('inf'):
+                add_to_copy("12. Срок окупаемости",
+                            "Ток = Робщ / Э, где Робщ = Сбал + Зобщ",
+                            f"Ток = {fmt(R_total)} / {fmt(E)} = {fmt(T_ok)}",
+                            T_ok, "лет")
+            else:
+                add_to_copy("12. Срок окупаемости",
+                            "Ток = Робщ / Э, где Робщ = Сбал + Зобщ",
+                            f"Ток = {fmt(R_total)} / {fmt(E)} (Э ≤ 0 - деление на ноль)",
+                            0, "лет")
 
-        if T_ok != float('inf'):
-            add_to_copy("12. Срок окупаемости",
-                        "Ток = Робщ / Э, где Робщ = Сбал + Зобщ",
-                        f"Ток = {fmt(R_total)} / {fmt(E)} = {fmt(T_ok)}",
-                        T_ok, "лет")
-        else:
-            add_to_copy("12. Срок окупаемости",
-                        "Ток = Робщ / Э, где Робщ = Сбал + Зобщ",
-                        f"Ток = {fmt(R_total)} / {fmt(E)} (Э ≤ 0)",
-                        0, "лет")
+            add_to_copy("13. Экономический эффект",
+                        "Е = Э / Робщ",
+                        f"Е = {fmt(E)} / {fmt(R_total)} = {fmt(E_eff)}",
+                        E_eff, "руб/год")
 
-        add_to_copy("13. Экономический эффект",
-                    "Е = Э / Робщ",
-                    f"Е = {fmt(E)} / {fmt(R_total)} = {fmt(E_eff)}",
-                    E_eff, "руб/год")
+            lines.append("\n" + "="*60)
+            if E > 0 and T_ok < 3:
+                lines.append("ВЫВОД: РАЗРАБОТКА ЭКОНОМИЧЕСКИ ЦЕЛЕСООБРАЗНА")
+            elif E > 0:
+                lines.append("ВЫВОД: РАЗРАБОТКА ЭКОНОМИЧЕСКИ ОПРАВДАНА, НО СРОК ОКУПАЕМОСТИ ВЫШЕ НОРМЫ")
+            else:
+                lines.append("ВЫВОД: РАЗРАБОТКА ЭКОНОМИЧЕСКИ НЕЦЕЛЕСООБРАЗНА")
+            lines.append("="*60)
 
-        lines.append("\n" + "="*60)
-        if E > 0 and T_ok < 3:
-            lines.append("ВЫВОД: РАЗРАБОТКА ЭКОНОМИЧЕСКИ ЦЕЛЕСООБРАЗНА")
-        elif E > 0:
-            lines.append("ВЫВОД: РАЗРАБОТКА ЭКОНОМИЧЕСКИ ОПРАВДАНА, НО СРОК ОКУПАЕМОСТИ ВЫШЕ НОРМЫ")
-        else:
-            lines.append("ВЫВОД: РАЗРАБОТКА ЭКОНОМИЧЕСКИ НЕЦЕЛЕСООБРАЗНА")
-        lines.append("="*60)
+            self.results_text = "\n".join(lines)
 
-        self.results_text = "\n".join(lines)
+            # === ВЫВОД В ИНТЕРФЕЙС ===
+            self.clear_results()
+            self.copy_btn.setVisible(True)
 
-        # === ВЫВОД В ИНТЕРФЕЙС (с индексами) ===
-        self.clear_results()
-        self.copy_btn.setVisible(True)
+            title = QLabel("<b>📊 РЕЗУЛЬТАТЫ РАСЧЁТА</b>")
+            title.setStyleSheet("font-size: 18px; color: #1f2a44; margin-bottom: 5px;")
+            self.results_layout.addWidget(title)
 
-        title = QLabel("<b>📊 РЕЗУЛЬТАТЫ РАСЧЁТА</b>")
-        title.setStyleSheet("font-size: 18px; color: #1f2a44; margin-bottom: 5px;")
-        self.results_layout.addWidget(title)
+            line = QFrame()
+            line.setFrameShape(QFrame.HLine)
+            line.setFrameShadow(QFrame.Sunken)
+            self.results_layout.addWidget(line)
 
-        line = QFrame()
-        line.setFrameShape(QFrame.HLine)
-        line.setFrameShadow(QFrame.Sunken)
-        self.results_layout.addWidget(line)
+            def add_result(name, general_formula, formula_with_values, value, unit=""):
+                group = QGroupBox(name)
+                group.setStyleSheet("""
+                    QGroupBox {
+                        background-color: rgba(255,255,255,0.9);
+                        border: 1px solid #d0d8e6;
+                        border-radius: 10px;
+                        margin-top: 0.5ex;
+                        padding: 5px;
+                    }
+                    QGroupBox::title {
+                        color: #1f2a44;
+                    }
+                """)
+                layout = QVBoxLayout(group)
+                layout.setSpacing(4)
 
-        def add_result(name, general_formula, formula_with_values, value, unit=""):
-            group = QGroupBox(name)
-            group.setStyleSheet("""
-                QGroupBox {
-                    background-color: rgba(255,255,255,0.9);
-                    border: 1px solid #d0d8e6;
-                    border-radius: 10px;
-                    margin-top: 0.5ex;
-                    padding: 5px;
-                }
-                QGroupBox::title {
-                    color: #1f2a44;
-                }
-            """)
-            layout = QVBoxLayout(group)
-            layout.setSpacing(4)
+                general_field = self.create_copyable_field(
+                    general_formula,
+                    "Нажмите Ctrl+A для выделения всей формулы, затем Ctrl+C для копирования"
+                )
+                layout.addWidget(general_field)
 
-            # Общая формула (с индексами)
-            general_label = self.create_formula_label(
-                general_formula,
-                "Нажмите Ctrl+A для выделения всей формулы, затем Ctrl+C для копирования"
+                values_field = self.create_copyable_field(
+                    formula_with_values,
+                    "Нажмите Ctrl+A для выделения всей формулы, затем Ctrl+C для копирования"
+                )
+                layout.addWidget(values_field)
+
+                if value == float('inf'):
+                    result_text = "∞ (деление на ноль)"
+                else:
+                    result_text = f"{fmt(value)} {unit}" if unit else f"{fmt(value)}"
+                
+                result_field = self.create_copyable_field(
+                    result_text,
+                    f"Результат: {result_text}",
+                    is_result=True
+                )
+                layout.addWidget(result_field)
+
+                self.results_layout.addWidget(group)
+
+            # Добавляем все блоки
+            add_result(
+                "1. Общие трудозатраты",
+                "T = tu + ta + tn + toml + td",
+                f"T = {fmt(tu)} + {fmt(ta)} + {fmt(tn)} + {fmt(toml)} + {fmt(td)} = {fmt(T)}",
+                T, "чел-час"
             )
-            layout.addWidget(general_label)
-
-            # Формула с подстановкой (с индексами)
-            values_label = self.create_formula_label(
-                formula_with_values,
-                "Нажмите Ctrl+A для выделения всей формулы, затем Ctrl+C для копирования"
+            add_result(
+                "2. Расходы на оплату труда и страховые взносы",
+                "Зот = T × Сч × кспр",
+                f"Зот = {fmt(T)} × {fmt(hourly)} × {fmt(insurance)} = {fmt(Z_ot)}",
+                Z_ot, "руб"
             )
-            layout.addWidget(values_label)
-
-            # Результат (с числом)
-            result_text = f"{fmt(value)} {unit}" if unit else f"{fmt(value)}"
-            result_label = self.create_formula_label(
-                result_text,
-                f"Результат: {result_text}",
-                is_result=True
+            add_result(
+                "3. Затраты на машинное время",
+                "Змв = Смч × (tn + toml)",
+                f"Змв = {fmt(machine_hour)} × ({fmt(tn)} + {fmt(toml)}) = {fmt(Z_mv)}",
+                Z_mv, "руб"
             )
-            layout.addWidget(result_label)
+            add_result(
+                "4. Затраты на электроэнергию",
+                "Зэл = Цэл × Р × (tn + toml + td)",
+                f"Зэл = {fmt(electricity)} × {fmt(power)} × ({fmt(tn)} + {fmt(toml)} + {fmt(td)}) = {fmt(Z_el)}",
+                Z_el, "руб"
+            )
+            add_result(
+                "5. Прочие затраты",
+                "Зпр = 5% × (Зот + Змв + Зэл)",
+                f"Зпр = 0.05 × ({fmt(Z_ot)} + {fmt(Z_mv)} + {fmt(Z_el)}) = {fmt(Z_pr)}",
+                Z_pr, "руб"
+            )
+            add_result(
+                "6. Затраты на разработку",
+                "Зрп = Зот + Змв + Зэл + Зпр",
+                f"Зрп = {fmt(Z_ot)} + {fmt(Z_mv)} + {fmt(Z_el)} + {fmt(Z_pr)} = {fmt(Z_rp)}",
+                Z_rp, "руб"
+            )
+            add_result(
+                "7. Амортизация",
+                "Ад = (На × Зрп) / 100",
+                f"Ад = ({fmt(dep_rate)} × {fmt(Z_rp)}) / 100 = {fmt(A)}",
+                A, "руб/год"
+            )
+            add_result(
+                "8. Трудоёмкость задачи",
+                "Тр = Тп.к × Нтр / 100",
+                f"Тр = {fmt(work_hours)} × {fmt(labor_intensity)} / 100 = {fmt(T_r)}",
+                T_r, "час/год"
+            )
+            add_result(
+                "9. Затраты по базовому варианту",
+                "Зб = Сч × Тр × (1 / Дз.п)",
+                f"Зб = {fmt(hourly)} × {fmt(T_r)} × (1 / {fmt(salary_share)}) = {fmt(Z_b)}",
+                Z_b, "руб/год"
+            )
+            add_result(
+                "10. Затраты при использовании ПО",
+                "Зп.п = (Тг × См + Зобщ) / Тс, где Зобщ = Зрп + Ад",
+                f"Зп.п = ({fmt(work_hours)} × {fmt(machine_hour)} + {fmt(total_expenses)}) / {fmt_int(useful_life)} = {fmt(Z_pp)}",
+                Z_pp, "руб/год"
+            )
+            add_result(
+                "11. Экономическая эффективность",
+                "Э = Зб - Зп.п",
+                f"Э = {fmt(Z_b)} - {fmt(Z_pp)} = {fmt(E)}",
+                E, "руб/год"
+            )
+            if T_ok != float('inf'):
+                add_result(
+                    "12. Срок окупаемости",
+                    "Ток = Робщ / Э, где Робщ = Сбал + Зобщ",
+                    f"Ток = {fmt(R_total)} / {fmt(E)} = {fmt(T_ok)}",
+                    T_ok, "лет"
+                )
+            else:
+                add_result(
+                    "12. Срок окупаемости",
+                    "Ток = Робщ / Э, где Робщ = Сбал + Зобщ",
+                    f"Ток = {fmt(R_total)} / {fmt(E)} (Э ≤ 0)",
+                    0, "лет"
+                )
+            add_result(
+                "13. Экономический эффект",
+                "Е = Э / Робщ",
+                f"Е = {fmt(E)} / {fmt(R_total)} = {fmt(E_eff)}",
+                E_eff, "руб/год"
+            )
 
-            self.results_layout.addWidget(group)
+            # Итоговое заключение
+            line2 = QFrame()
+            line2.setFrameShape(QFrame.HLine)
+            line2.setFrameShadow(QFrame.Sunken)
+            self.results_layout.addWidget(line2)
 
-        # Подготовим строки с индексами
-        # Для общей формулы и подстановки применяем format_with_indices
+            conclusion = QLabel()
+            conclusion.setAlignment(Qt.AlignCenter)
+            if E > 0 and T_ok < 3:
+                conclusion.setText("✅ РАЗРАБОТКА ЭКОНОМИЧЕСКИ ЦЕЛЕСООБРАЗНА")
+                conclusion.setStyleSheet("background: #e2f0d9; color: #1e6b2e; font-size: 16px; font-weight: bold; border-radius: 10px; padding: 12px;")
+            elif E > 0:
+                conclusion.setText("⚠ РАЗРАБОТКА ЭКОНОМИЧЕСКИ ОПРАВДАНА, НО СРОК ОКУПАЕМОСТИ ВЫШЕ НОРМЫ")
+                conclusion.setStyleSheet("background: #fff3cd; color: #856404; font-size: 16px; font-weight: bold; border-radius: 10px; padding: 12px;")
+            else:
+                conclusion.setText("❌ РАЗРАБОТКА ЭКОНОМИЧЕСКИ НЕЦЕЛЕСООБРАЗНА")
+                conclusion.setStyleSheet("background: #f8d7da; color: #721c24; font-size: 16px; font-weight: bold; border-radius: 10px; padding: 12px;")
+            self.results_layout.addWidget(conclusion)
 
-        # 1. Общие трудозатраты
-        general1 = fmt_idx("T = tu + ta + tn + toml + td")
-        values1 = fmt_idx(f"T = {fmt(tu)} + {fmt(ta)} + {fmt(tn)} + {fmt(toml)} + {fmt(td)} = {fmt(T)}")
-        add_result("1. Общие трудозатраты", general1, values1, T, "чел-час")
+            info_label = QLabel("💡 Для копирования отдельных формул выделите текст в поле выше и нажмите Ctrl+C")
+            info_label.setStyleSheet("color: #6c757d; font-size: 10pt; font-style: italic; padding: 5px;")
+            info_label.setAlignment(Qt.AlignCenter)
+            self.results_layout.addWidget(info_label)
 
-        # 2. Расходы на оплату труда
-        general2 = fmt_idx("Зот = T × Сч × кспр")
-        values2 = fmt_idx(f"Зот = {fmt(T)} × {fmt(hourly)} × {fmt(insurance)} = {fmt(Z_ot)}")
-        add_result("2. Расходы на оплату труда и страховые взносы", general2, values2, Z_ot, "руб")
+            self.results_layout.addStretch()
+            self.tabs.setCurrentIndex(1)
 
-        # 3. Затраты на машинное время
-        general3 = fmt_idx("Змв = Смч × (tn + toml)")
-        values3 = fmt_idx(f"Змв = {fmt(machine_hour)} × ({fmt(tn)} + {fmt(toml)}) = {fmt(Z_mv)}")
-        add_result("3. Затраты на машинное время", general3, values3, Z_mv, "руб")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Произошла ошибка при расчёте:\n{str(e)}")
 
-        # 4. Затраты на электроэнергию
-        general4 = fmt_idx("Зэл = Цэл × Р × (tn + toml + td)")
-        values4 = fmt_idx(f"Зэл = {fmt(electricity)} × {fmt(power)} × ({fmt(tn)} + {fmt(toml)} + {fmt(td)}) = {fmt(Z_el)}")
-        add_result("4. Затраты на электроэнергию", general4, values4, Z_el, "руб")
-
-        # 5. Прочие затраты
-        general5 = fmt_idx("Зпр = 5% × (Зот + Змв + Зэл)")
-        values5 = fmt_idx(f"Зпр = 0.05 × ({fmt(Z_ot)} + {fmt(Z_mv)} + {fmt(Z_el)}) = {fmt(Z_pr)}")
-        add_result("5. Прочие затраты", general5, values5, Z_pr, "руб")
-
-        # 6. Затраты на разработку
-        general6 = fmt_idx("Зрп = Зот + Змв + Зэл + Зпр")
-        values6 = fmt_idx(f"Зрп = {fmt(Z_ot)} + {fmt(Z_mv)} + {fmt(Z_el)} + {fmt(Z_pr)} = {fmt(Z_rp)}")
-        add_result("6. Затраты на разработку", general6, values6, Z_rp, "руб")
-
-        # 7. Амортизация
-        general7 = fmt_idx("Ад = (На × Зрп) / 100")
-        values7 = fmt_idx(f"Ад = ({fmt(dep_rate)} × {fmt(Z_rp)}) / 100 = {fmt(A)}")
-        add_result("7. Амортизация", general7, values7, A, "руб/год")
-
-        # 8. Трудоёмкость задачи
-        general8 = fmt_idx("Тр = Тп.к × Нтр / 100")
-        values8 = fmt_idx(f"Тр = {fmt(work_hours)} × {fmt(labor_intensity)} / 100 = {fmt(T_r)}")
-        add_result("8. Трудоёмкость задачи", general8, values8, T_r, "час/год")
-
-        # 9. Затраты по базовому варианту
-        general9 = fmt_idx("Зб = Сч × Тр × (1 / Дз.п)")
-        values9 = fmt_idx(f"Зб = {fmt(hourly)} × {fmt(T_r)} × (1 / {fmt(salary_share)}) = {fmt(Z_b)}")
-        add_result("9. Затраты по базовому варианту", general9, values9, Z_b, "руб/год")
-
-        # 10. Затраты при использовании ПО
-        general10 = fmt_idx("Зп.п = (Тг × См + Зобщ) / Тс, где Зобщ = Зрп + Ад")
-        values10 = fmt_idx(f"Зп.п = ({fmt(work_hours)} × {fmt(machine_hour)} + {fmt(total_expenses)}) / {fmt_int(useful_life)} = {fmt(Z_pp)}")
-        add_result("10. Затраты при использовании ПО", general10, values10, Z_pp, "руб/год")
-
-        # 11. Экономическая эффективность
-        general11 = fmt_idx("Э = Зб - Зп.п")
-        values11 = fmt_idx(f"Э = {fmt(Z_b)} - {fmt(Z_pp)} = {fmt(E)}")
-        add_result("11. Экономическая эффективность", general11, values11, E, "руб/год")
-
-        # 12. Срок окупаемости
-        if T_ok != float('inf'):
-            general12 = fmt_idx("Ток = Робщ / Э, где Робщ = Сбал + Зобщ")
-            values12 = fmt_idx(f"Ток = {fmt(R_total)} / {fmt(E)} = {fmt(T_ok)}")
-            add_result("12. Срок окупаемости", general12, values12, T_ok, "лет")
-        else:
-            general12 = fmt_idx("Ток = Робщ / Э, где Робщ = Сбал + Зобщ")
-            values12 = fmt_idx(f"Ток = {fmt(R_total)} / {fmt(E)} (Э ≤ 0)")
-            add_result("12. Срок окупаемости", general12, values12, 0, "лет")
-
-        # 13. Экономический эффект
-        general13 = fmt_idx("Е = Э / Робщ")
-        values13 = fmt_idx(f"Е = {fmt(E)} / {fmt(R_total)} = {fmt(E_eff)}")
-        add_result("13. Экономический эффект", general13, values13, E_eff, "руб/год")
-
-        # Итоговое заключение
-        line2 = QFrame()
-        line2.setFrameShape(QFrame.HLine)
-        line2.setFrameShadow(QFrame.Sunken)
-        self.results_layout.addWidget(line2)
-
-        conclusion = QLabel()
-        conclusion.setAlignment(Qt.AlignCenter)
-        if E > 0 and T_ok < 3:
-            conclusion.setText("✅ РАЗРАБОТКА ЭКОНОМИЧЕСКИ ЦЕЛЕСООБРАЗНА")
-            conclusion.setStyleSheet("background: #e2f0d9; color: #1e6b2e; font-size: 16px; font-weight: bold; border-radius: 10px; padding: 12px;")
-        elif E > 0:
-            conclusion.setText("⚠ РАЗРАБОТКА ЭКОНОМИЧЕСКИ ОПРАВДАНА, НО СРОК ОКУПАЕМОСТИ ВЫШЕ НОРМЫ")
-            conclusion.setStyleSheet("background: #fff3cd; color: #856404; font-size: 16px; font-weight: bold; border-radius: 10px; padding: 12px;")
-        else:
-            conclusion.setText("❌ РАЗРАБОТКА ЭКОНОМИЧЕСКИ НЕЦЕЛЕСООБРАЗНА")
-            conclusion.setStyleSheet("background: #f8d7da; color: #721c24; font-size: 16px; font-weight: bold; border-radius: 10px; padding: 12px;")
-        self.results_layout.addWidget(conclusion)
-
-        info_label = QLabel("💡 Для копирования отдельных формул выделите текст в поле выше и нажмите Ctrl+C")
-        info_label.setStyleSheet("color: #6c757d; font-size: 10pt; font-style: italic; padding: 5px;")
-        info_label.setAlignment(Qt.AlignCenter)
-        self.results_layout.addWidget(info_label)
-
-        self.results_layout.addStretch()
-        self.tabs.setCurrentIndex(1)
 
     def clear_results(self):
         while self.results_layout.count():
