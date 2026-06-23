@@ -159,6 +159,27 @@ class EconomicCalculator(QMainWindow):
         QMessageBox {
             background-color: white;
         }
+        /* Стиль для полей с формулами (для выделения) */
+        QTextEdit {
+            background-color: #f8f9fc;
+            border: 1px solid #d0d8e6;
+            border-radius: 6px;
+            padding: 6px 8px;
+            font-family: 'Consolas', 'Courier New', monospace;
+            font-size: 10pt;
+            color: #1f2a44;
+        }
+        QTextEdit:focus {
+            border: 2px solid #5b7cfa;
+            background-color: #f4f7ff;
+        }
+        /* Стиль для поля результата */
+        QTextEdit[cssClass="result"] {
+            background-color: #eef3ff;
+            border: 2px solid #5b7cfa;
+            font-weight: bold;
+            color: #1f2a44;
+        }
         """
         self.setStyleSheet(style)
 
@@ -319,7 +340,7 @@ class EconomicCalculator(QMainWindow):
         self.results_layout.setSpacing(12)
 
         # Кнопка копирования (будет добавлена позже)
-        self.copy_btn = QPushButton("📋 Копировать результаты")
+        self.copy_btn = QPushButton("📋 Копировать все результаты")
         self.copy_btn.setMinimumHeight(40)
         self.copy_btn.clicked.connect(self.copy_results)
         self.copy_btn.setVisible(False)
@@ -357,6 +378,43 @@ class EconomicCalculator(QMainWindow):
         clipboard = QGuiApplication.clipboard()
         clipboard.setText(self.results_text)
         QMessageBox.information(self, "Готово", "Результаты скопированы в буфер обмена.")
+
+    def create_copyable_field(self, text, tooltip="", is_result=False):
+        """Создаёт поле QTextEdit для выделения и копирования"""
+        text_edit = QTextEdit()
+        text_edit.setPlainText(text)
+        text_edit.setReadOnly(True)
+        
+        if is_result:
+            text_edit.setMaximumHeight(50)
+            text_edit.setProperty("cssClass", "result")
+            text_edit.setToolTip(tooltip if tooltip else "Выделите результат и скопируйте (Ctrl+C)")
+        else:
+            text_edit.setMaximumHeight(50)
+            text_edit.setToolTip(tooltip if tooltip else "Выделите текст и скопируйте (Ctrl+C)")
+        
+        text_edit.setStyleSheet("""
+            QTextEdit {
+                background-color: #f8f9fc;
+                border: 1px solid #d0d8e6;
+                border-radius: 6px;
+                padding: 6px 8px;
+                font-family: 'Consolas', 'Courier New', monospace;
+                font-size: 10pt;
+                color: #1f2a44;
+            }
+            QTextEdit:focus {
+                border: 2px solid #5b7cfa;
+                background-color: #f4f7ff;
+            }
+            QTextEdit[cssClass="result"] {
+                background-color: #eef3ff;
+                border: 2px solid #5b7cfa;
+                font-weight: bold;
+                color: #1f2a44;
+            }
+        """)
+        return text_edit
 
     def calculate(self):
         # Сбор данных
@@ -398,7 +456,7 @@ class EconomicCalculator(QMainWindow):
         T_ok = R_total / E if E > 0 else float('inf')
         E_eff = E / R_total if R_total > 0 else 0
 
-        # Формируем текст для копирования
+        # Формируем текст для копирования (весь отчёт)
         lines = []
         lines.append("="*60)
         lines.append("РЕЗУЛЬТАТЫ РАСЧЁТА ЭКОНОМИЧЕСКОЙ ЭФФЕКТИВНОСТИ")
@@ -406,70 +464,70 @@ class EconomicCalculator(QMainWindow):
 
         def add_to_copy(name, general, subst, value, unit=""):
             lines.append(f"\n{name}")
-            lines.append(f"  Формула: {general}")
-            lines.append(f"  Подстановка: {subst}")
+            lines.append(f"  {general}")
+            lines.append(f"  {subst}")
             lines.append(f"  Результат: {value:,.2f} {unit}".strip())
             lines.append("-"*40)
 
         add_to_copy("1. Общие трудозатраты",
                     "T = tu + ta + tn + toml + td",
-                    f"T = {tu} + {ta} + {tn} + {toml} + {td}",
+                    f"T = {tu} + {ta} + {tn} + {toml} + {td} = {T:.2f}",
                     T, "чел-час")
 
         add_to_copy("2. Расходы на оплату труда и страховые взносы",
                     "Зот = T × Сч × кспр",
-                    f"Зот = {T:.2f} × {hourly} × {insurance}",
+                    f"Зот = {T:.2f} × {hourly} × {insurance} = {Z_ot:.2f}",
                     Z_ot, "руб")
 
         add_to_copy("3. Затраты на машинное время",
                     "Змв = Смч × (tn + toml)",
-                    f"Змв = {machine_hour} × ({tn} + {toml})",
+                    f"Змв = {machine_hour} × ({tn} + {toml}) = {Z_mv:.2f}",
                     Z_mv, "руб")
 
         add_to_copy("4. Затраты на электроэнергию",
                     "Зэл = Цэл × Р × (tn + toml + td)",
-                    f"Зэл = {electricity} × {power} × ({tn} + {toml} + {td})",
+                    f"Зэл = {electricity} × {power} × ({tn} + {toml} + {td}) = {Z_el:.2f}",
                     Z_el, "руб")
 
         add_to_copy("5. Прочие затраты",
                     "Зпр = 5% × (Зот + Змв + Зэл)",
-                    f"Зпр = 0.05 × ({Z_ot:.2f} + {Z_mv:.2f} + {Z_el:.2f})",
+                    f"Зпр = 0.05 × ({Z_ot:.2f} + {Z_mv:.2f} + {Z_el:.2f}) = {Z_pr:.2f}",
                     Z_pr, "руб")
 
         add_to_copy("6. Затраты на разработку",
                     "Зрп = Зот + Змв + Зэл + Зпр",
-                    f"Зрп = {Z_ot:.2f} + {Z_mv:.2f} + {Z_el:.2f} + {Z_pr:.2f}",
+                    f"Зрп = {Z_ot:.2f} + {Z_mv:.2f} + {Z_el:.2f} + {Z_pr:.2f} = {Z_rp:.2f}",
                     Z_rp, "руб")
 
         add_to_copy("7. Амортизация",
                     "Ад = (На × Зрп) / 100",
-                    f"Ад = ({dep_rate} × {Z_rp:.2f}) / 100",
+                    f"Ад = ({dep_rate} × {Z_rp:.2f}) / 100 = {A:.2f}",
                     A, "руб/год")
 
         add_to_copy("8. Трудоёмкость задачи",
                     "Тр = Тп.к × Нтр / 100",
-                    f"Тр = {work_hours} × {labor_intensity} / 100",
+                    f"Тр = {work_hours} × {labor_intensity} / 100 = {T_r:.2f}",
                     T_r, "час/год")
 
         add_to_copy("9. Затраты по базовому варианту",
                     "Зб = Сч × Тр × (1 / Дз.п)",
-                    f"Зб = {hourly} × {T_r:.2f} × (1 / {salary_share})",
+                    f"Зб = {hourly} × {T_r:.2f} × (1 / {salary_share}) = {Z_b:.2f}",
                     Z_b, "руб/год")
 
         add_to_copy("10. Затраты при использовании ПО",
                     "Зп.п = (Тг × См + Зобщ) / Тс, где Зобщ = Зрп + Ад",
-                    f"Зп.п = ({work_hours} × {machine_hour} + {total_expenses:.2f}) / {useful_life}",
+                    f"Зп.п = ({work_hours} × {machine_hour} + {total_expenses:.2f}) / {useful_life} = {Z_pp:.2f}",
                     Z_pp, "руб/год")
 
         add_to_copy("11. Экономическая эффективность",
                     "Э = Зб - Зп.п",
-                    f"Э = {Z_b:.2f} - {Z_pp:.2f}",
+                    f"Э = {Z_b:.2f} - {Z_pp:.2f} = {E:.2f}",
                     E, "руб/год")
 
         if T_ok != float('inf'):
             add_to_copy("12. Срок окупаемости",
                         "Ток = Робщ / Э, где Робщ = Сбал + Зобщ",
-                        f"Ток = {R_total:.2f} / {E:.2f}",
+                        f"Ток = {R_total:.2f} / {E:.2f} = {T_ok:.2f}",
                         T_ok, "лет")
         else:
             add_to_copy("12. Срок окупаемости",
@@ -479,7 +537,7 @@ class EconomicCalculator(QMainWindow):
 
         add_to_copy("13. Экономический эффект",
                     "Е = Э / Робщ",
-                    f"Е = {E:.2f} / {R_total:.2f}",
+                    f"Е = {E:.2f} / {R_total:.2f} = {E_eff:.4f}",
                     E_eff, "руб/год")
 
         lines.append("\n" + "="*60)
@@ -514,6 +572,7 @@ class EconomicCalculator(QMainWindow):
                     border: 1px solid #d0d8e6;
                     border-radius: 10px;
                     margin-top: 0.5ex;
+                    padding: 5px;
                 }
                 QGroupBox::title {
                     color: #1f2a44;
@@ -522,18 +581,28 @@ class EconomicCalculator(QMainWindow):
             layout = QVBoxLayout(group)
             layout.setSpacing(4)
 
-            general_label = QLabel(f"<b>Формула (общий вид):</b> {general_formula}")
-            general_label.setStyleSheet("font-family: 'Consolas', 'Courier New'; color: #2c3e50;")
-            layout.addWidget(general_label)
+            # Поле для формулы в общем виде
+            general_field = self.create_copyable_field(
+                general_formula, 
+                "Нажмите Ctrl+A для выделения всей формулы, затем Ctrl+C для копирования"
+            )
+            layout.addWidget(general_field)
 
-            values_label = QLabel(f"<b>С подстановкой:</b> {formula_with_values}")
-            values_label.setStyleSheet("font-family: 'Consolas', 'Courier New'; color: #34495e;")
-            layout.addWidget(values_label)
+            # Поле для формулы с подстановкой и результатом
+            values_field = self.create_copyable_field(
+                formula_with_values,
+                "Нажмите Ctrl+A для выделения всей формулы, затем Ctrl+C для копирования"
+            )
+            layout.addWidget(values_field)
 
-            result_text = f"<b>Результат:</b> {value:,.2f} {unit}" if unit else f"<b>Результат:</b> {value:,.2f}"
-            result_label = QLabel(result_text)
-            result_label.setStyleSheet("color: #3b5de7; font-weight: bold; font-size: 11pt;")
-            layout.addWidget(result_label)
+            # Поле для результата (отдельно, с выделением)
+            result_text = f"{value:,.2f} {unit}" if unit else f"{value:,.2f}"
+            result_field = self.create_copyable_field(
+                result_text,
+                f"Результат: {result_text}",
+                is_result=True
+            )
+            layout.addWidget(result_field)
 
             self.results_layout.addWidget(group)
 
@@ -541,74 +610,74 @@ class EconomicCalculator(QMainWindow):
         add_result(
             "1. Общие трудозатраты",
             "T = tu + ta + tn + toml + td",
-            f"T = {tu} + {ta} + {tn} + {toml} + {td}",
+            f"T = {tu} + {ta} + {tn} + {toml} + {td} = {T:.2f}",
             T, "чел-час"
         )
         add_result(
             "2. Расходы на оплату труда и страховые взносы",
             "Зот = T × Сч × кспр",
-            f"Зот = {T:.2f} × {hourly} × {insurance}",
+            f"Зот = {T:.2f} × {hourly} × {insurance} = {Z_ot:.2f}",
             Z_ot, "руб"
         )
         add_result(
             "3. Затраты на машинное время",
             "Змв = Смч × (tn + toml)",
-            f"Змв = {machine_hour} × ({tn} + {toml})",
+            f"Змв = {machine_hour} × ({tn} + {toml}) = {Z_mv:.2f}",
             Z_mv, "руб"
         )
         add_result(
             "4. Затраты на электроэнергию",
             "Зэл = Цэл × Р × (tn + toml + td)",
-            f"Зэл = {electricity} × {power} × ({tn} + {toml} + {td})",
+            f"Зэл = {electricity} × {power} × ({tn} + {toml} + {td}) = {Z_el:.2f}",
             Z_el, "руб"
         )
         add_result(
             "5. Прочие затраты",
             "Зпр = 5% × (Зот + Змв + Зэл)",
-            f"Зпр = 0.05 × ({Z_ot:.2f} + {Z_mv:.2f} + {Z_el:.2f})",
+            f"Зпр = 0.05 × ({Z_ot:.2f} + {Z_mv:.2f} + {Z_el:.2f}) = {Z_pr:.2f}",
             Z_pr, "руб"
         )
         add_result(
             "6. Затраты на разработку",
             "Зрп = Зот + Змв + Зэл + Зпр",
-            f"Зрп = {Z_ot:.2f} + {Z_mv:.2f} + {Z_el:.2f} + {Z_pr:.2f}",
+            f"Зрп = {Z_ot:.2f} + {Z_mv:.2f} + {Z_el:.2f} + {Z_pr:.2f} = {Z_rp:.2f}",
             Z_rp, "руб"
         )
         add_result(
             "7. Амортизация",
             "Ад = (На × Зрп) / 100",
-            f"Ад = ({dep_rate} × {Z_rp:.2f}) / 100",
+            f"Ад = ({dep_rate} × {Z_rp:.2f}) / 100 = {A:.2f}",
             A, "руб/год"
         )
         add_result(
             "8. Трудоёмкость задачи",
             "Тр = Тп.к × Нтр / 100",
-            f"Тр = {work_hours} × {labor_intensity} / 100",
+            f"Тр = {work_hours} × {labor_intensity} / 100 = {T_r:.2f}",
             T_r, "час/год"
         )
         add_result(
             "9. Затраты по базовому варианту",
             "Зб = Сч × Тр × (1 / Дз.п)",
-            f"Зб = {hourly} × {T_r:.2f} × (1 / {salary_share})",
+            f"Зб = {hourly} × {T_r:.2f} × (1 / {salary_share}) = {Z_b:.2f}",
             Z_b, "руб/год"
         )
         add_result(
             "10. Затраты при использовании ПО",
             "Зп.п = (Тг × См + Зобщ) / Тс, где Зобщ = Зрп + Ад",
-            f"Зп.п = ({work_hours} × {machine_hour} + {total_expenses:.2f}) / {useful_life}",
+            f"Зп.п = ({work_hours} × {machine_hour} + {total_expenses:.2f}) / {useful_life} = {Z_pp:.2f}",
             Z_pp, "руб/год"
         )
         add_result(
             "11. Экономическая эффективность",
             "Э = Зб - Зп.п",
-            f"Э = {Z_b:.2f} - {Z_pp:.2f}",
+            f"Э = {Z_b:.2f} - {Z_pp:.2f} = {E:.2f}",
             E, "руб/год"
         )
         if T_ok != float('inf'):
             add_result(
                 "12. Срок окупаемости",
                 "Ток = Робщ / Э, где Робщ = Сбал + Зобщ",
-                f"Ток = {R_total:.2f} / {E:.2f}",
+                f"Ток = {R_total:.2f} / {E:.2f} = {T_ok:.2f}",
                 T_ok, "лет"
             )
         else:
@@ -621,7 +690,7 @@ class EconomicCalculator(QMainWindow):
         add_result(
             "13. Экономический эффект",
             "Е = Э / Робщ",
-            f"Е = {E:.2f} / {R_total:.2f}",
+            f"Е = {E:.2f} / {R_total:.2f} = {E_eff:.4f}",
             E_eff, "руб/год"
         )
 
@@ -644,6 +713,12 @@ class EconomicCalculator(QMainWindow):
             conclusion.setText("❌ РАЗРАБОТКА ЭКОНОМИЧЕСКИ НЕЦЕЛЕСООБРАЗНА")
             conclusion.setStyleSheet("background: #f8d7da; color: #721c24; font-size: 16px; font-weight: bold; border-radius: 10px; padding: 12px;")
         self.results_layout.addWidget(conclusion)
+
+        # Информация о возможности копирования
+        info_label = QLabel("💡 Для копирования отдельных формул выделите текст в поле выше и нажмите Ctrl+C")
+        info_label.setStyleSheet("color: #6c757d; font-size: 10pt; font-style: italic; padding: 5px;")
+        info_label.setAlignment(Qt.AlignCenter)
+        self.results_layout.addWidget(info_label)
 
         self.results_layout.addStretch()
         self.tabs.setCurrentIndex(1)
