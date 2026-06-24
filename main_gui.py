@@ -1,6 +1,8 @@
 import sys
 import re
 import math
+import csv
+import os
 from PySide6.QtWidgets import *
 from PySide6.QtCore import Qt, QLocale, Signal
 from PySide6.QtGui import QIcon, QFont, QGuiApplication
@@ -58,6 +60,11 @@ class EconomicCalculator(QMainWindow):
 
         self.locale = QLocale("ru_RU")
         self.apply_styles()
+
+        # Параметры для графика точки безубыточности (по умолчанию)
+        self.sales_per_month = 5
+        self.price_per_copy = 1000.0
+        self.var_cost_per_unit = 300.0  # фиксировано
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -154,7 +161,6 @@ class EconomicCalculator(QMainWindow):
 
     def format_number_no_decimals(self, value):
         """Форматирует число без десятичных знаков"""
-        # Преобразуем в float для корректного форматирования
         value = float(value)
         return self.locale.toString(value, 'f', 0)
 
@@ -478,17 +484,26 @@ class EconomicCalculator(QMainWindow):
         self.results_layout = QVBoxLayout(self.results_container)
         self.results_layout.setSpacing(12)
 
+        # Кнопка копирования результатов
         self.copy_btn = QPushButton("Копировать все результаты")
         self.copy_btn.setMinimumHeight(40)
         self.copy_btn.clicked.connect(self.copy_results)
         self.copy_btn.setVisible(False)
         layout.addWidget(self.copy_btn)
 
+        # Кнопка экспорта сводной таблицы в CSV
+        self.export_btn = QPushButton("Экспортировать сводную таблицу (CSV)")
+        self.export_btn.setMinimumHeight(40)
+        self.export_btn.clicked.connect(self.export_results_csv)
+        self.export_btn.setVisible(False)
+        layout.addWidget(self.export_btn)
+
     def setup_charts_tab(self):
         """Настройка вкладки с графиками"""
         layout = QVBoxLayout(self.charts_tab)
         layout.setContentsMargins(10, 10, 10, 10)
 
+        # Информационная панель
         info_label = QLabel(
             "Графики финансового анализа — "
             "нажмите «Рассчитать» для построения графиков на основе введённых данных."
@@ -504,6 +519,32 @@ class EconomicCalculator(QMainWindow):
         info_label.setWordWrap(True)
         layout.addWidget(info_label)
 
+        # Панель параметров для графика "Точка безубыточности"
+        param_group = QGroupBox("Параметры графика «Точка безубыточности»")
+        param_layout = QHBoxLayout(param_group)
+        param_layout.setSpacing(10)
+
+        lbl_sales = QLabel("Продажи в месяц (шт.):")
+        self.sales_spin = QSpinBox()
+        self.sales_spin.setRange(1, 100000)
+        self.sales_spin.setValue(self.sales_per_month)
+        self.sales_spin.valueChanged.connect(self.on_sales_params_changed)
+
+        lbl_price = QLabel("Цена за копию (руб.):")
+        self.price_spin = QDoubleSpinBox()
+        self.price_spin.setRange(0.01, 1e9)
+        self.price_spin.setValue(self.price_per_copy)
+        self.price_spin.valueChanged.connect(self.on_sales_params_changed)
+
+        param_layout.addWidget(lbl_sales)
+        param_layout.addWidget(self.sales_spin)
+        param_layout.addWidget(lbl_price)
+        param_layout.addWidget(self.price_spin)
+        param_layout.addStretch()
+
+        layout.addWidget(param_group)
+
+        # Канва графика
         self.chart_canvas = MplCanvas(self, width=9, height=7, dpi=100)
 
         toolbar = NavigationToolbar(self.chart_canvas, self)
@@ -515,7 +556,20 @@ class EconomicCalculator(QMainWindow):
         refresh_btn.clicked.connect(self.update_charts)
         layout.addWidget(refresh_btn)
 
+        # Кнопка экспорта данных графиков в CSV
+        self.export_charts_btn = QPushButton("Экспортировать данные графиков (CSV)")
+        self.export_charts_btn.setMinimumHeight(35)
+        self.export_charts_btn.clicked.connect(self.export_charts_data_csv)
+        self.export_charts_btn.setVisible(False)
+        layout.addWidget(self.export_charts_btn)
+
         self.draw_empty_chart()
+
+    def on_sales_params_changed(self):
+        """Слот для обновления параметров графика при изменении полей"""
+        self.sales_per_month = self.sales_spin.value()
+        self.price_per_copy = self.price_spin.value()
+        self.update_charts()  # перерисовываем графики с новыми параметрами
 
     def draw_empty_chart(self):
         """Рисует заглушку на графике"""
@@ -523,7 +577,7 @@ class EconomicCalculator(QMainWindow):
         canvas.fig.clear()
         ax = canvas.fig.add_subplot(111)
         ax.text(
-            0.5, 0.5, 
+            0.5, 0.5,
             "Нажмите «Рассчитать»\nдля построения графиков",
             horizontalalignment='center',
             verticalalignment='center',
@@ -543,7 +597,7 @@ class EconomicCalculator(QMainWindow):
     def update_charts(self):
         if not self.calculation_data:
             QMessageBox.information(
-                self, "Нет данных", 
+                self, "Нет данных",
                 "Сначала выполните расчёт (нажмите «Рассчитать»)."
             )
             return
@@ -557,7 +611,7 @@ class EconomicCalculator(QMainWindow):
         data = self.calculation_data
         canvas = self.chart_canvas
         canvas.fig.clear()
-        
+
         # Получаем данные
         Z_ot = data['Z_ot']
         Z_mv = data['Z_mv']
@@ -580,34 +634,28 @@ class EconomicCalculator(QMainWindow):
         costs = [Z_ot, Z_mv, Z_el, Z_pr]
         labels = ['Заработная плата', 'Машинное время', 'Электроэнергия', 'Прочие затраты']
         colors = ['#3498db', '#2ecc71', '#e67e22', '#e74c3c']
-        
-        # Отображаем только ненулевые значения
+
         filtered = [(c, l, col) for c, l, col in zip(costs, labels, colors) if c > 0]
-        
+
         if filtered:
             vals, lbls, cols = zip(*filtered)
-            
-            # Строим круговую диаграмму (без подписей на секторах)
             wedges, texts, autotexts = ax1.pie(
-                vals, 
-                labels=None,  # Убираем подписи с секторов
-                colors=cols, 
+                vals,
+                labels=None,
+                colors=cols,
                 autopct='%1.1f%%',
                 startangle=90,
                 textprops={'fontsize': 9, 'color': '#2c3e50', 'fontweight': 'bold'},
                 wedgeprops={'edgecolor': 'white', 'linewidth': 1}
             )
-            
-            # Создаём легенду слева от диаграммы
+
             legend_labels = [f'{l} ({v:,.0f} руб.)' for l, v in zip(lbls, vals)]
             legend_handles = [plt.Rectangle((0,0), 1, 1, color=c) for c in cols]
-            
-            # Размещаем легенду слева с большим отступом
             legend = ax1.legend(
-                legend_handles, 
-                legend_labels, 
+                legend_handles,
+                legend_labels,
                 loc='center left',
-                bbox_to_anchor=(-0.35, 0.5),  # Сдвигаем ещё левее
+                bbox_to_anchor=(-0.35, 0.5),
                 fontsize=8,
                 framealpha=0.95,
                 edgecolor='#d0d8e6',
@@ -617,104 +665,116 @@ class EconomicCalculator(QMainWindow):
                 handlelength=1.5,
                 handletextpad=0.8
             )
-            
             ax1.set_title('Структура затрат на разработку', fontsize=11, fontweight='bold', color='#2c3e50')
-            
-            # Настраиваем положение диаграммы, чтобы она не перекрывалась с легендой
-            # Используем параметр position для смещения диаграммы вправо
-            ax1.set_position([0.2, 0.55, 0.6, 0.35])  # [left, bottom, width, height]
-            
+            ax1.set_position([0.2, 0.55, 0.6, 0.35])
         else:
             ax1.text(0.5, 0.5, 'Нет данных', ha='center', va='center', fontsize=12)
             ax1.set_title('Структура затрат', fontsize=11, fontweight='bold')
 
-        # 2. Точка безубыточности
-        monthly_saving = E / 12 if E > 0 else 0
-        if T_ok != float('inf') and T_ok > 0:
-            fixed_costs = Z_rp / T_ok if T_ok != float('inf') else Z_rp
+        # ========== 2. НОВЫЙ ГРАФИК ТОЧКИ БЕЗУБЫТОЧНОСТИ с параметрами продаж ==========
+        # Получаем параметры из полей ввода (уже сохранены в self)
+        sales_per_month = self.sales_per_month
+        price_per_copy = self.price_per_copy
+        var_cost_per_unit = 300.0  # фиксировано, можно потом вынести в настройки
+
+        # Постоянные затраты = затраты на разработку (Зрп)
+        fixed_costs = Z_rp
+
+        # Точка безубыточности в единицах (общий объём продаж)
+        if price_per_copy > var_cost_per_unit:
+            break_even_units = fixed_costs / (price_per_copy - var_cost_per_unit)
         else:
-            fixed_costs = Z_rp / 6
-        
-        price_per_unit = 1000
-        var_cost_per_unit = 300
-        
-        if price_per_unit > var_cost_per_unit:
-            breakeven_units = fixed_costs / (price_per_unit - var_cost_per_unit)
+            break_even_units = float('inf')
+
+        # Строим график по оси X = объём продаж (в единицах)
+        max_units = max(break_even_units * 2.5 if break_even_units != float('inf') else 1000, 100)
+        x = np.linspace(0, max_units, 200)
+        revenue = price_per_copy * x
+        total_cost = fixed_costs + var_cost_per_unit * x
+
+        ax2.plot(x, revenue, 'g-', linewidth=2, label='Выручка')
+        ax2.plot(x, total_cost, 'r-', linewidth=2, label='Общие затраты')
+        ax2.axhline(y=fixed_costs, color='b', linestyle='--', linewidth=1.5, label='Постоянные затраты', alpha=0.7)
+
+        # Отмечаем точку безубыточности
+        if break_even_units != float('inf') and break_even_units <= max_units:
+            ax2.axvline(x=break_even_units, color='k', linestyle=':', linewidth=1, alpha=0.7)
+            ax2.plot(break_even_units, price_per_copy * break_even_units, 'ko', markersize=8)
+            ax2.annotate(f'Точка безубыточности\n{break_even_units:.0f} ед.',
+                         xy=(break_even_units, price_per_copy * break_even_units),
+                         xytext=(break_even_units * 0.5, price_per_copy * break_even_units * 1.3),
+                         fontsize=8, ha='center',
+                         arrowprops=dict(arrowstyle='->', color='gray', lw=1))
+
+            # Вычисляем срок окупаемости в месяцах при заданных продажах в месяц
+            if sales_per_month > 0:
+                payback_months = break_even_units / sales_per_month
+                # Добавляем информацию на график
+                ax2.text(0.98, 0.05,
+                         f'Срок окупаемости: {payback_months:.1f} мес.\n'
+                         f'(при {sales_per_month} шт./мес.)',
+                         transform=ax2.transAxes,
+                         fontsize=8,
+                         verticalalignment='bottom',
+                         horizontalalignment='right',
+                         bbox=dict(boxstyle='round', facecolor='white', alpha=0.8))
         else:
-            breakeven_units = 0
-        
-        units = np.linspace(0, max(breakeven_units * 2.5, 100), 100)
-        total_revenue = price_per_unit * units
-        total_cost = fixed_costs + var_cost_per_unit * units
-        fixed_cost_line = np.full_like(units, fixed_costs)
-        
-        ax2.plot(units, total_revenue, 'g-', linewidth=2, label='Выручка')
-        ax2.plot(units, total_cost, 'r-', linewidth=2, label='Общие затраты')
-        ax2.plot(units, fixed_cost_line, 'b--', linewidth=1.5, label='Постоянные затраты', alpha=0.7)
-        
-        if breakeven_units > 0 and breakeven_units < max(units):
-            ax2.axvline(x=breakeven_units, color='k', linestyle=':', linewidth=1, alpha=0.7)
-            ax2.plot(breakeven_units, price_per_unit * breakeven_units, 'ko', markersize=8)
-            ax2.annotate(f'Точка безубыточности\n{breakeven_units:.0f} ед.', 
-                        xy=(breakeven_units, price_per_unit * breakeven_units),
-                        xytext=(breakeven_units * 0.5, price_per_unit * breakeven_units * 1.3),
-                        fontsize=8, ha='center',
-                        arrowprops=dict(arrowstyle='->', color='gray', lw=1))
-        
-        if breakeven_units > 0 and breakeven_units < max(units):
-            ax2.axvspan(0, breakeven_units, alpha=0.1, color='red', label='Зона убытков')
-            ax2.axvspan(breakeven_units, max(units), alpha=0.1, color='green', label='Зона прибыли')
-        
-        ax2.set_xlabel('Объём (условные единицы)')
+            ax2.text(0.5, 0.5, 'Точка безубыточности не достигается\n(цена ≤ переменные затраты)',
+                     transform=ax2.transAxes, ha='center', va='center', fontsize=10, color='red')
+
+        ax2.set_xlabel('Объём продаж (шт.)')
         ax2.set_ylabel('Затраты / Выручка (руб)')
-        ax2.set_title('Точка безубыточности', fontsize=11, fontweight='bold')
+        ax2.set_title(f'Точка безубыточности\n(цена = {price_per_copy:.0f} руб., переменные затраты = {var_cost_per_unit:.0f} руб.)',
+                     fontsize=11, fontweight='bold')
         ax2.legend(loc='upper left', fontsize=8)
         ax2.grid(True, alpha=0.3)
-        ax2.set_xlim(0, max(units))
+        ax2.set_xlim(0, max_units)
+        ax2.set_ylim(0, max(revenue.max(), total_cost.max()) * 1.1)
 
         # 3. Ежемесячные доходы и расходы
-        months = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 
+        months = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн',
                  'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
-        x = np.arange(len(months))
+        x_months = np.arange(len(months))
         width = 0.35
-        
-        seasonal_factors = [0.7, 0.65, 0.8, 0.85, 0.9, 1.0, 
+
+        monthly_saving = E / 12 if E > 0 else 0
+        seasonal_factors = [0.7, 0.65, 0.8, 0.85, 0.9, 1.0,
                            1.0, 0.95, 0.9, 1.0, 1.05, 1.1]
         monthly_income = [E / 12 * f for f in seasonal_factors]
         monthly_expenses = monthly_saving * 0.7 * np.array(seasonal_factors)
-        
-        ax3.bar(x - width/2, monthly_income, width, label='Доходы', color='#2ecc71', alpha=0.8)
-        ax3.bar(x + width/2, monthly_expenses, width, label='Расходы', color='#e74c3c', alpha=0.8)
-        
+
+        ax3.bar(x_months - width/2, monthly_income, width, label='Доходы', color='#2ecc71', alpha=0.8)
+        ax3.bar(x_months + width/2, monthly_expenses, width, label='Расходы', color='#e74c3c', alpha=0.8)
+
         ax3.set_xlabel('Месяцы')
         ax3.set_ylabel('Сумма (руб)')
         ax3.set_title('Ежемесячные доходы и расходы', fontsize=11, fontweight='bold')
-        ax3.set_xticks(x)
+        ax3.set_xticks(x_months)
         ax3.set_xticklabels(months, rotation=45, ha='right')
         ax3.legend(fontsize=9)
         ax3.grid(True, alpha=0.3, axis='y')
 
-        # 4. Накопленный денежный поток
+        # 4. Накопленный денежный поток (оставляем без изменений)
         years = np.arange(0, 6, 1)
         yearly_income = E
         cumulative_cash = -Z_rp + yearly_income * years
-        
+
         ax4.plot(years, cumulative_cash, 'b-o', linewidth=2, markersize=8, label='Накопленный поток')
         ax4.axhline(y=0, color='k', linestyle='-', linewidth=1, alpha=0.5)
-        
+
         if T_ok != float('inf') and T_ok <= 6:
             ax4.axvline(x=T_ok, color='r', linestyle='--', linewidth=1.5, alpha=0.7)
             ax4.plot(T_ok, 0, 'ro', markersize=8)
             max_cash = max(cumulative_cash) if max(cumulative_cash) > 0 else 10000
-            ax4.annotate(f'Окупаемость\n{T_ok:.1f} лет', 
+            ax4.annotate(f'Окупаемость\n{T_ok:.1f} лет',
                         xy=(T_ok, 0),
                         xytext=(T_ok * 0.7, max_cash * 0.3),
                         fontsize=8, ha='center',
                         arrowprops=dict(arrowstyle='->', color='gray', lw=1))
-        
+
         ax4.set_xlabel('Годы')
         ax4.set_ylabel('Накопленный денежный поток (руб)')
-        ax4.set_title('Накопленный денежный поток и срок окупаемости', 
+        ax4.set_title('Накопленный денежный поток и срок окупаемости',
                      fontsize=11, fontweight='bold')
         ax4.grid(True, alpha=0.3)
         ax4.legend(fontsize=9)
@@ -741,6 +801,12 @@ class EconomicCalculator(QMainWindow):
         self.useful_life.setValue(6)
         self.depreciation_rate.setValue(16.67)
         self.pc_cost.setValue(129600)
+        # Параметры продаж для графика точки безубыточности
+        self.sales_spin.setValue(5)
+        self.price_spin.setValue(1000.0)
+        # Обновляем поля ввода (они уже есть на вкладке "Графики")
+        self.sales_per_month = 5
+        self.price_per_copy = 1000.0
 
     def clear_fields(self):
         for widget in self.findChildren(NoWheelDoubleSpinBox):
@@ -853,6 +919,138 @@ class EconomicCalculator(QMainWindow):
         layout.addWidget(btn_close)
 
         dialog.exec()
+
+    def export_results_csv(self):
+        """Экспорт сводной таблицы результатов в CSV"""
+        if not self.calculation_data:
+            QMessageBox.information(self, "Нет данных", "Сначала выполните расчёт.")
+            return
+
+        data = self.calculation_data
+        # Собираем показатели
+        rows = [
+            ["Показатель", "Значение", "Ед. изм."],
+            ["Общие трудозатраты (T)", self.format_number(data['T']), "чел-час"],
+            ["Расходы на оплату труда (Зот)", self.format_number(data['Z_ot']), "руб"],
+            ["Затраты на машинное время (Змв)", self.format_number(data['Z_mv']), "руб"],
+            ["Затраты на электроэнергию (Зэл)", self.format_number(data['Z_el']), "руб"],
+            ["Прочие затраты (Зпр)", self.format_number(data['Z_pr']), "руб"],
+            ["Затраты на разработку (Зрп)", self.format_number(data['Z_rp']), "руб"],
+            ["Амортизация (Ад)", self.format_number(data['A']), "руб/год"],
+            ["Трудоёмкость задачи (Тр)", self.format_number(data['T_r']), "час/год"],
+            ["Затраты по базовому варианту (Зб)", self.format_number(data['Z_b']), "руб/год"],
+            ["Затраты при использовании ПО (Зп.п)", self.format_number(data['Z_pp']), "руб/год"],
+            ["Экономическая эффективность (Э)", self.format_number(data['E']), "руб/год"],
+            ["Срок окупаемости (Ток)", self.format_number(data['T_ok']) if data['T_ok'] != float('inf') else "∞", "лет"],
+            ["Экономический эффект (Е)", self.format_number(data['E_eff']), "руб/год"],
+        ]
+
+        # Добавляем данные о продажах и окупаемости от продаж
+        sales_per_month = self.sales_spin.value()
+        price_per_copy = self.price_spin.value()
+        monthly_revenue = sales_per_month * price_per_copy
+        if monthly_revenue > 0:
+            payback_months = data['Z_rp'] / monthly_revenue
+            rows.append(["Окупаемость от продаж (мес.)", self.format_number(payback_months), "мес."])
+            rows.append(["Продажи в месяц", str(sales_per_month), "шт."])
+            rows.append(["Цена за копию", self.format_number(price_per_copy), "руб."])
+        else:
+            rows.append(["Окупаемость от продаж (мес.)", "∞", "мес."])
+
+        # Выбор файла для сохранения
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Сохранить CSV", "results.csv", "CSV файлы (*.csv)"
+        )
+        if not file_path:
+            return
+
+        try:
+            with open(file_path, 'w', newline='', encoding='utf-8-sig') as f:
+                writer = csv.writer(f, delimiter=';')
+                writer.writerows(rows)
+            QMessageBox.information(self, "Готово", f"Сводная таблица сохранена в:\n{file_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить файл:\n{str(e)}")
+
+    def export_charts_data_csv(self):
+        """Экспорт данных, используемых для построения графиков, в CSV"""
+        if not self.calculation_data:
+            QMessageBox.information(self, "Нет данных", "Сначала выполните расчёт.")
+            return
+
+        data = self.calculation_data
+        # Выбор файла для сохранения
+        file_path, _ = QFileDialog.getSaveFileName(
+            self, "Сохранить данные графиков", "charts_data.csv", "CSV файлы (*.csv)"
+        )
+        if not file_path:
+            return
+
+        try:
+            with open(file_path, 'w', newline='', encoding='utf-8-sig') as f:
+                writer = csv.writer(f, delimiter=';')
+
+                # 1. Структура затрат
+                writer.writerow(["=== Структура затрат ==="])
+                writer.writerow(["Статья затрат", "Сумма (руб.)", "Доля (%)"])
+                Z_ot = data['Z_ot']
+                Z_mv = data['Z_mv']
+                Z_el = data['Z_el']
+                Z_pr = data['Z_pr']
+                total = Z_ot + Z_mv + Z_el + Z_pr
+                if total > 0:
+                    writer.writerow(["Заработная плата", self.format_number(Z_ot), f"{Z_ot/total*100:.1f}"])
+                    writer.writerow(["Машинное время", self.format_number(Z_mv), f"{Z_mv/total*100:.1f}"])
+                    writer.writerow(["Электроэнергия", self.format_number(Z_el), f"{Z_el/total*100:.1f}"])
+                    writer.writerow(["Прочие затраты", self.format_number(Z_pr), f"{Z_pr/total*100:.1f}"])
+                writer.writerow([])
+
+                # 2. Точка безубыточности (основные параметры)
+                writer.writerow(["=== Точка безубыточности ==="])
+                writer.writerow(["Параметр", "Значение"])
+                writer.writerow(["Постоянные затраты (Зрп)", self.format_number(data['Z_rp'])])
+                writer.writerow(["Цена за копию", self.format_number(self.price_spin.value())])
+                writer.writerow(["Переменные затраты на единицу", "300.00"])
+                price = self.price_spin.value()
+                var_cost = 300.0
+                if price > var_cost:
+                    break_even = data['Z_rp'] / (price - var_cost)
+                    writer.writerow(["Точка безубыточности (ед.)", self.format_number(break_even)])
+                    sales = self.sales_spin.value()
+                    if sales > 0:
+                        writer.writerow(["Срок окупаемости (мес.)", self.format_number(break_even / sales)])
+                else:
+                    writer.writerow(["Точка безубыточности", "Не достигается"])
+                writer.writerow([])
+
+                # 3. Ежемесячные доходы и расходы
+                writer.writerow(["=== Ежемесячные доходы и расходы ==="])
+                writer.writerow(["Месяц", "Доход (руб.)", "Расход (руб.)"])
+                months = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн',
+                          'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
+                E = data['E']
+                monthly_saving = E / 12 if E > 0 else 0
+                seasonal_factors = [0.7, 0.65, 0.8, 0.85, 0.9, 1.0,
+                                    1.0, 0.95, 0.9, 1.0, 1.05, 1.1]
+                monthly_income = [E / 12 * f for f in seasonal_factors]
+                monthly_expenses = monthly_saving * 0.7 * np.array(seasonal_factors)
+                for i, m in enumerate(months):
+                    writer.writerow([m, self.format_number(monthly_income[i]), self.format_number(monthly_expenses[i])])
+                writer.writerow([])
+
+                # 4. Накопленный денежный поток (по годам)
+                writer.writerow(["=== Накопленный денежный поток ==="])
+                writer.writerow(["Год", "Накопленный поток (руб.)"])
+                years = range(0, 6)
+                yearly_income = E
+                cumulative = -data['Z_rp']
+                for y in years:
+                    cumulative += yearly_income
+                    writer.writerow([str(y), self.format_number(cumulative)])
+
+            QMessageBox.information(self, "Готово", f"Данные графиков сохранены в:\n{file_path}")
+        except Exception as e:
+            QMessageBox.critical(self, "Ошибка", f"Не удалось сохранить файл:\n{str(e)}")
 
     def calculate(self):
         try:
@@ -1009,6 +1207,8 @@ class EconomicCalculator(QMainWindow):
             # ----- ВЫВОД В ИНТЕРФЕЙС -----
             self.clear_results()
             self.copy_btn.setVisible(True)
+            self.export_btn.setVisible(True)
+            self.export_charts_btn.setVisible(True)
 
             title = QLabel("<b>РЕЗУЛЬТАТЫ РАСЧЁТА</b>")
             title.setStyleSheet("font-size: 18px; color: #1f2a44; margin-bottom: 5px;")
@@ -1283,7 +1483,6 @@ def main():
     window = EconomicCalculator()
     window.show()
     sys.exit(app.exec())
-
 
 if __name__ == "__main__":
     main()
