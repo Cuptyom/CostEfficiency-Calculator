@@ -40,17 +40,20 @@ class NoWheelDoubleSpinBox(QDoubleSpinBox):
 # ======================================================================
 
 class MplCanvas(FigureCanvas):
-    """Канва для отображения графиков Matplotlib"""
-    def __init__(self, parent=None, width=9, height=7, dpi=100):
+    """Канва для отображения графиков Matplotlib с фиксированным размером"""
+    def __init__(self, parent=None, width=12, height=8, dpi=100):
         plt.rcParams['font.sans-serif'] = ['Arial', 'DejaVu Sans', 'Helvetica', 'Liberation Sans']
         plt.rcParams['axes.unicode_minus'] = False
         
-        self.fig = Figure(figsize=(width, height), dpi=dpi, facecolor='#f5f7fa')
+        # Используем constrained_layout для стабильного позиционирования
+        self.fig = Figure(figsize=(width, height), dpi=dpi,
+                          facecolor='#f5f7fa',
+                          constrained_layout=True)
         super().__init__(self.fig)
         self.setParent(parent)
-        
+        # Фиксируем минимальный размер, чтобы холст не сжимался
+        self.setMinimumSize(width * dpi, height * dpi)
         self.axes = self.fig.add_subplot(111)
-        self.fig.tight_layout(pad=2.0)
 
 class EconomicCalculator(QMainWindow):
     def __init__(self):
@@ -553,7 +556,7 @@ class EconomicCalculator(QMainWindow):
 
         layout.addWidget(param_group)
 
-        # Канва графика (увеличиваем размер)
+        # Канва графика (размер 12x8 дюймов)
         self.chart_canvas = MplCanvas(self, width=12, height=8, dpi=100)
         # Разрешаем холсту растягиваться
         self.chart_canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
@@ -615,7 +618,6 @@ class EconomicCalculator(QMainWindow):
         ax.spines['right'].set_visible(False)
         ax.spines['bottom'].set_visible(False)
         ax.spines['left'].set_visible(False)
-        canvas.fig.tight_layout(pad=2.0)
         canvas.draw()
 
     def update_charts(self):
@@ -696,21 +698,17 @@ class EconomicCalculator(QMainWindow):
             ax1.set_title('Структура затрат', fontsize=11, fontweight='bold')
 
         # ========== 2. НОВЫЙ ГРАФИК ТОЧКИ БЕЗУБЫТОЧНОСТИ с параметрами продаж ==========
-        # Получаем параметры из полей ввода (уже сохранены в self)
         sales_per_month = self.sales_per_month
         price_per_copy = self.price_per_copy
-        var_cost_per_unit = 300.0  # фиксировано, можно потом вынести в настройки
+        var_cost_per_unit = 300.0
 
-        # Постоянные затраты = затраты на разработку (Зрп)
         fixed_costs = Z_rp
 
-        # Точка безубыточности в единицах (общий объём продаж)
         if price_per_copy > var_cost_per_unit:
             break_even_units = fixed_costs / (price_per_copy - var_cost_per_unit)
         else:
             break_even_units = float('inf')
 
-        # Строим график по оси X = объём продаж (в единицах)
         max_units = max(break_even_units * 2.5 if break_even_units != float('inf') else 1000, 100)
         x = np.linspace(0, max_units, 200)
         revenue = price_per_copy * x
@@ -720,7 +718,6 @@ class EconomicCalculator(QMainWindow):
         ax2.plot(x, total_cost, 'r-', linewidth=2, label='Общие затраты')
         ax2.axhline(y=fixed_costs, color='b', linestyle='--', linewidth=1.5, label='Постоянные затраты', alpha=0.7)
 
-        # Отмечаем точку безубыточности
         if break_even_units != float('inf') and break_even_units <= max_units:
             ax2.axvline(x=break_even_units, color='k', linestyle=':', linewidth=1, alpha=0.7)
             ax2.plot(break_even_units, price_per_copy * break_even_units, 'ko', markersize=8)
@@ -730,10 +727,8 @@ class EconomicCalculator(QMainWindow):
                          fontsize=8, ha='center',
                          arrowprops=dict(arrowstyle='->', color='gray', lw=1))
 
-            # Вычисляем срок окупаемости в месяцах при заданных продажах в месяц
             if sales_per_month > 0:
                 payback_months = break_even_units / sales_per_month
-                # Добавляем информацию на график
                 ax2.text(0.98, 0.05,
                          f'Срок окупаемости: {payback_months:.1f} мес.\n'
                          f'(при {sales_per_month} шт./мес.)',
@@ -778,7 +773,7 @@ class EconomicCalculator(QMainWindow):
         ax3.legend(fontsize=9)
         ax3.grid(True, alpha=0.3, axis='y')
 
-        # 4. Накопленный денежный поток (оставляем без изменений)
+        # 4. Накопленный денежный поток
         years = np.arange(0, 6, 1)
         yearly_income = E
         cumulative_cash = -Z_rp + yearly_income * years
@@ -805,7 +800,7 @@ class EconomicCalculator(QMainWindow):
         ax4.set_xlim(0, 5.5)
         ax4.set_xticks(years)
 
-        canvas.fig.tight_layout(pad=2.0)
+        # Принудительно обновляем холст – размер фигуры уже зафиксирован через constrained_layout
         canvas.draw()
 
     def load_example(self):
@@ -951,7 +946,6 @@ class EconomicCalculator(QMainWindow):
             return
 
         data = self.calculation_data
-        # Собираем показатели
         rows = [
             ["Показатель", "Значение", "Ед. изм."],
             ["Общие трудозатраты (T)", self.format_number(data['T']), "чел-час"],
@@ -969,7 +963,6 @@ class EconomicCalculator(QMainWindow):
             ["Экономический эффект (Е)", self.format_number(data['E_eff']), "руб/год"],
         ]
 
-        # Добавляем данные о продажах и окупаемости от продаж
         sales_per_month = self.sales_spin.value()
         price_per_copy = self.price_spin.value()
         monthly_revenue = sales_per_month * price_per_copy
@@ -981,7 +974,6 @@ class EconomicCalculator(QMainWindow):
         else:
             rows.append(["Окупаемость от продаж (мес.)", "∞", "мес."])
 
-        # Выбор файла для сохранения
         file_path, _ = QFileDialog.getSaveFileName(
             self, "Сохранить CSV", "results.csv", "CSV файлы (*.csv)"
         )
@@ -1003,7 +995,6 @@ class EconomicCalculator(QMainWindow):
             return
 
         data = self.calculation_data
-        # Выбор файла для сохранения
         file_path, _ = QFileDialog.getSaveFileName(
             self, "Сохранить данные графиков", "charts_data.csv", "CSV файлы (*.csv)"
         )
@@ -1014,7 +1005,6 @@ class EconomicCalculator(QMainWindow):
             with open(file_path, 'w', newline='', encoding='utf-8-sig') as f:
                 writer = csv.writer(f, delimiter=';')
 
-                # 1. Структура затрат
                 writer.writerow(["=== Структура затрат ==="])
                 writer.writerow(["Статья затрат", "Сумма (руб.)", "Доля (%)"])
                 Z_ot = data['Z_ot']
@@ -1029,7 +1019,6 @@ class EconomicCalculator(QMainWindow):
                     writer.writerow(["Прочие затраты", self.format_number(Z_pr), f"{Z_pr/total*100:.1f}"])
                 writer.writerow([])
 
-                # 2. Точка безубыточности (основные параметры)
                 writer.writerow(["=== Точка безубыточности ==="])
                 writer.writerow(["Параметр", "Значение"])
                 writer.writerow(["Постоянные затраты (Зрп)", self.format_number(data['Z_rp'])])
@@ -1047,7 +1036,6 @@ class EconomicCalculator(QMainWindow):
                     writer.writerow(["Точка безубыточности", "Не достигается"])
                 writer.writerow([])
 
-                # 3. Ежемесячные доходы и расходы
                 writer.writerow(["=== Ежемесячные доходы и расходы ==="])
                 writer.writerow(["Месяц", "Доход (руб.)", "Расход (руб.)"])
                 months = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн',
@@ -1062,7 +1050,6 @@ class EconomicCalculator(QMainWindow):
                     writer.writerow([m, self.format_number(monthly_income[i]), self.format_number(monthly_expenses[i])])
                 writer.writerow([])
 
-                # 4. Накопленный денежный поток (по годам)
                 writer.writerow(["=== Накопленный денежный поток ==="])
                 writer.writerow(["Год", "Накопленный поток (руб.)"])
                 years = range(0, 6)
@@ -1507,6 +1494,7 @@ def main():
     window = EconomicCalculator()
     window.show()
     sys.exit(app.exec())
+
 
 if __name__ == "__main__":
     main()
