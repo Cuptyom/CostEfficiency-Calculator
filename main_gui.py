@@ -1,8 +1,22 @@
 import sys
 import re
+import math
 from PySide6.QtWidgets import *
 from PySide6.QtCore import Qt, QLocale, Signal
 from PySide6.QtGui import QIcon, QFont, QGuiApplication
+
+# Для графиков
+import matplotlib
+matplotlib.use('Qt5Agg')
+from matplotlib.backends.backend_qt5agg import FigureCanvasQTAgg as FigureCanvas
+from matplotlib.backends.backend_qt5agg import NavigationToolbar2QT as NavigationToolbar
+from matplotlib.figure import Figure
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Подавляем предупреждения matplotlib
+import warnings
+warnings.filterwarnings("ignore", category=UserWarning)
 
 # =================== КАСТОМНЫЙ GROUPBOX С КЛИКОМ ===================
 class ClickableGroupBox(QGroupBox):
@@ -23,11 +37,24 @@ class NoWheelDoubleSpinBox(QDoubleSpinBox):
         event.ignore()
 # ======================================================================
 
+class MplCanvas(FigureCanvas):
+    """Канва для отображения графиков Matplotlib"""
+    def __init__(self, parent=None, width=9, height=7, dpi=100):
+        plt.rcParams['font.sans-serif'] = ['Arial', 'DejaVu Sans', 'Helvetica', 'Liberation Sans']
+        plt.rcParams['axes.unicode_minus'] = False
+        
+        self.fig = Figure(figsize=(width, height), dpi=dpi, facecolor='#f5f7fa')
+        super().__init__(self.fig)
+        self.setParent(parent)
+        
+        self.axes = self.fig.add_subplot(111)
+        self.fig.tight_layout(pad=2.0)
+
 class EconomicCalculator(QMainWindow):
     def __init__(self):
         super().__init__()
         self.setWindowTitle("Расчёт экономической эффективности ПО")
-        self.setMinimumSize(950, 750)
+        self.setMinimumSize(1000, 800)
 
         self.locale = QLocale("ru_RU")
         self.apply_styles()
@@ -42,12 +69,16 @@ class EconomicCalculator(QMainWindow):
         main_layout.addWidget(self.tabs)
 
         self.input_tab = QWidget()
-        self.tabs.addTab(self.input_tab, "📝 Ввод данных")
+        self.tabs.addTab(self.input_tab, "Ввод данных")
         self.setup_input_tab()
 
         self.results_tab = QWidget()
-        self.tabs.addTab(self.results_tab, "📊 Результаты")
+        self.tabs.addTab(self.results_tab, "Результаты")
         self.setup_results_tab()
+
+        self.charts_tab = QWidget()
+        self.tabs.addTab(self.charts_tab, "Графики")
+        self.setup_charts_tab()
 
         # Панель кнопок
         button_panel = QHBoxLayout()
@@ -76,6 +107,7 @@ class EconomicCalculator(QMainWindow):
         main_layout.addLayout(button_panel)
 
         self.results_text = ""
+        self.calculation_data = None
 
         # Словарь для описания переменных
         self.var_descriptions = {
@@ -115,14 +147,16 @@ class EconomicCalculator(QMainWindow):
         }
 
     def format_number(self, value):
+        """Форматирует число с 2 знаками после запятой"""
         if isinstance(value, int):
             value = float(value)
         return self.locale.toString(value, 'f', 2)
 
     def format_number_no_decimals(self, value):
-        if isinstance(value, int):
-            return self.locale.toString(value)
-        return self.locale.toString(round(value), 'f', 0)
+        """Форматирует число без десятичных знаков"""
+        # Преобразуем в float для корректного форматирования
+        value = float(value)
+        return self.locale.toString(value, 'f', 0)
 
     def format_with_indices(self, text):
         replacements = {
@@ -351,9 +385,9 @@ class EconomicCalculator(QMainWindow):
         form_layout.setSpacing(15)
 
         instruction_label = QLabel(
-            "ℹ️ <b>Инструкция:</b> Введите исходные данные в поля ниже. "
-            "Для быстрого заполнения нажмите <b>«Загрузить пример»</b>. "
-            "После ввода всех данных нажмите <b>«Рассчитать»</b> для получения отчёта."
+            "Инструкция: Введите исходные данные в поля ниже. "
+            "Для быстрого заполнения нажмите «Загрузить пример». "
+            "После ввода всех данных нажмите «Рассчитать» для получения отчёта."
         )
         instruction_label.setStyleSheet("""
             background-color: #eef3ff;
@@ -444,11 +478,251 @@ class EconomicCalculator(QMainWindow):
         self.results_layout = QVBoxLayout(self.results_container)
         self.results_layout.setSpacing(12)
 
-        self.copy_btn = QPushButton("📋 Копировать все результаты")
+        self.copy_btn = QPushButton("Копировать все результаты")
         self.copy_btn.setMinimumHeight(40)
         self.copy_btn.clicked.connect(self.copy_results)
         self.copy_btn.setVisible(False)
         layout.addWidget(self.copy_btn)
+
+    def setup_charts_tab(self):
+        """Настройка вкладки с графиками"""
+        layout = QVBoxLayout(self.charts_tab)
+        layout.setContentsMargins(10, 10, 10, 10)
+
+        info_label = QLabel(
+            "Графики финансового анализа — "
+            "нажмите «Рассчитать» для построения графиков на основе введённых данных."
+        )
+        info_label.setStyleSheet("""
+            background-color: #eef3ff;
+            border: 1px solid #5b7cfa;
+            border-radius: 8px;
+            padding: 10px;
+            color: #1f2a44;
+            font-size: 11pt;
+        """)
+        info_label.setWordWrap(True)
+        layout.addWidget(info_label)
+
+        self.chart_canvas = MplCanvas(self, width=9, height=7, dpi=100)
+
+        toolbar = NavigationToolbar(self.chart_canvas, self)
+        layout.addWidget(toolbar)
+        layout.addWidget(self.chart_canvas)
+
+        refresh_btn = QPushButton("Обновить графики")
+        refresh_btn.setMinimumHeight(35)
+        refresh_btn.clicked.connect(self.update_charts)
+        layout.addWidget(refresh_btn)
+
+        self.draw_empty_chart()
+
+    def draw_empty_chart(self):
+        """Рисует заглушку на графике"""
+        canvas = self.chart_canvas
+        canvas.fig.clear()
+        ax = canvas.fig.add_subplot(111)
+        ax.text(
+            0.5, 0.5, 
+            "Нажмите «Рассчитать»\nдля построения графиков",
+            horizontalalignment='center',
+            verticalalignment='center',
+            transform=ax.transAxes,
+            fontsize=14,
+            color='#666'
+        )
+        ax.set_xticks([])
+        ax.set_yticks([])
+        ax.spines['top'].set_visible(False)
+        ax.spines['right'].set_visible(False)
+        ax.spines['bottom'].set_visible(False)
+        ax.spines['left'].set_visible(False)
+        canvas.fig.tight_layout(pad=2.0)
+        canvas.draw()
+
+    def update_charts(self):
+        if not self.calculation_data:
+            QMessageBox.information(
+                self, "Нет данных", 
+                "Сначала выполните расчёт (нажмите «Рассчитать»)."
+            )
+            return
+        self.draw_charts()
+
+    def draw_charts(self):
+        if not self.calculation_data:
+            self.draw_empty_chart()
+            return
+
+        data = self.calculation_data
+        canvas = self.chart_canvas
+        canvas.fig.clear()
+        
+        # Получаем данные
+        Z_ot = data['Z_ot']
+        Z_mv = data['Z_mv']
+        Z_el = data['Z_el']
+        Z_pr = data['Z_pr']
+        Z_rp = data['Z_rp']
+        A = data['A']
+        total_expenses = data['total_expenses']
+        E = data['E']
+        E_eff = data['E_eff']
+        T_ok = data['T_ok']
+
+        # Создаём четыре подграфика в сетке 2x2
+        ax1 = canvas.fig.add_subplot(2, 2, 1)
+        ax2 = canvas.fig.add_subplot(2, 2, 2)
+        ax3 = canvas.fig.add_subplot(2, 2, 3)
+        ax4 = canvas.fig.add_subplot(2, 2, 4)
+
+        # 1. Структура затрат (круговая диаграмма с легендой)
+        costs = [Z_ot, Z_mv, Z_el, Z_pr]
+        labels = ['Заработная плата', 'Машинное время', 'Электроэнергия', 'Прочие затраты']
+        colors = ['#3498db', '#2ecc71', '#e67e22', '#e74c3c']
+        
+        # Отображаем только ненулевые значения
+        filtered = [(c, l, col) for c, l, col in zip(costs, labels, colors) if c > 0]
+        
+        if filtered:
+            vals, lbls, cols = zip(*filtered)
+            
+            # Строим круговую диаграмму (без подписей на секторах)
+            wedges, texts, autotexts = ax1.pie(
+                vals, 
+                labels=None,  # Убираем подписи с секторов
+                colors=cols, 
+                autopct='%1.1f%%',
+                startangle=90,
+                textprops={'fontsize': 9, 'color': '#2c3e50', 'fontweight': 'bold'},
+                wedgeprops={'edgecolor': 'white', 'linewidth': 1}
+            )
+            
+            # Создаём легенду слева от диаграммы
+            legend_labels = [f'{l} ({v:,.0f} руб.)' for l, v in zip(lbls, vals)]
+            legend_handles = [plt.Rectangle((0,0), 1, 1, color=c) for c in cols]
+            
+            # Размещаем легенду слева с большим отступом
+            legend = ax1.legend(
+                legend_handles, 
+                legend_labels, 
+                loc='center left',
+                bbox_to_anchor=(-0.35, 0.5),  # Сдвигаем ещё левее
+                fontsize=8,
+                framealpha=0.95,
+                edgecolor='#d0d8e6',
+                title='Статьи затрат',
+                title_fontsize=9,
+                borderpad=0.5,
+                handlelength=1.5,
+                handletextpad=0.8
+            )
+            
+            ax1.set_title('Структура затрат на разработку', fontsize=11, fontweight='bold', color='#2c3e50')
+            
+            # Настраиваем положение диаграммы, чтобы она не перекрывалась с легендой
+            # Используем параметр position для смещения диаграммы вправо
+            ax1.set_position([0.2, 0.55, 0.6, 0.35])  # [left, bottom, width, height]
+            
+        else:
+            ax1.text(0.5, 0.5, 'Нет данных', ha='center', va='center', fontsize=12)
+            ax1.set_title('Структура затрат', fontsize=11, fontweight='bold')
+
+        # 2. Точка безубыточности
+        monthly_saving = E / 12 if E > 0 else 0
+        if T_ok != float('inf') and T_ok > 0:
+            fixed_costs = Z_rp / T_ok if T_ok != float('inf') else Z_rp
+        else:
+            fixed_costs = Z_rp / 6
+        
+        price_per_unit = 1000
+        var_cost_per_unit = 300
+        
+        if price_per_unit > var_cost_per_unit:
+            breakeven_units = fixed_costs / (price_per_unit - var_cost_per_unit)
+        else:
+            breakeven_units = 0
+        
+        units = np.linspace(0, max(breakeven_units * 2.5, 100), 100)
+        total_revenue = price_per_unit * units
+        total_cost = fixed_costs + var_cost_per_unit * units
+        fixed_cost_line = np.full_like(units, fixed_costs)
+        
+        ax2.plot(units, total_revenue, 'g-', linewidth=2, label='Выручка')
+        ax2.plot(units, total_cost, 'r-', linewidth=2, label='Общие затраты')
+        ax2.plot(units, fixed_cost_line, 'b--', linewidth=1.5, label='Постоянные затраты', alpha=0.7)
+        
+        if breakeven_units > 0 and breakeven_units < max(units):
+            ax2.axvline(x=breakeven_units, color='k', linestyle=':', linewidth=1, alpha=0.7)
+            ax2.plot(breakeven_units, price_per_unit * breakeven_units, 'ko', markersize=8)
+            ax2.annotate(f'Точка безубыточности\n{breakeven_units:.0f} ед.', 
+                        xy=(breakeven_units, price_per_unit * breakeven_units),
+                        xytext=(breakeven_units * 0.5, price_per_unit * breakeven_units * 1.3),
+                        fontsize=8, ha='center',
+                        arrowprops=dict(arrowstyle='->', color='gray', lw=1))
+        
+        if breakeven_units > 0 and breakeven_units < max(units):
+            ax2.axvspan(0, breakeven_units, alpha=0.1, color='red', label='Зона убытков')
+            ax2.axvspan(breakeven_units, max(units), alpha=0.1, color='green', label='Зона прибыли')
+        
+        ax2.set_xlabel('Объём (условные единицы)')
+        ax2.set_ylabel('Затраты / Выручка (руб)')
+        ax2.set_title('Точка безубыточности', fontsize=11, fontweight='bold')
+        ax2.legend(loc='upper left', fontsize=8)
+        ax2.grid(True, alpha=0.3)
+        ax2.set_xlim(0, max(units))
+
+        # 3. Ежемесячные доходы и расходы
+        months = ['Янв', 'Фев', 'Мар', 'Апр', 'Май', 'Июн', 
+                 'Июл', 'Авг', 'Сен', 'Окт', 'Ноя', 'Дек']
+        x = np.arange(len(months))
+        width = 0.35
+        
+        seasonal_factors = [0.7, 0.65, 0.8, 0.85, 0.9, 1.0, 
+                           1.0, 0.95, 0.9, 1.0, 1.05, 1.1]
+        monthly_income = [E / 12 * f for f in seasonal_factors]
+        monthly_expenses = monthly_saving * 0.7 * np.array(seasonal_factors)
+        
+        ax3.bar(x - width/2, monthly_income, width, label='Доходы', color='#2ecc71', alpha=0.8)
+        ax3.bar(x + width/2, monthly_expenses, width, label='Расходы', color='#e74c3c', alpha=0.8)
+        
+        ax3.set_xlabel('Месяцы')
+        ax3.set_ylabel('Сумма (руб)')
+        ax3.set_title('Ежемесячные доходы и расходы', fontsize=11, fontweight='bold')
+        ax3.set_xticks(x)
+        ax3.set_xticklabels(months, rotation=45, ha='right')
+        ax3.legend(fontsize=9)
+        ax3.grid(True, alpha=0.3, axis='y')
+
+        # 4. Накопленный денежный поток
+        years = np.arange(0, 6, 1)
+        yearly_income = E
+        cumulative_cash = -Z_rp + yearly_income * years
+        
+        ax4.plot(years, cumulative_cash, 'b-o', linewidth=2, markersize=8, label='Накопленный поток')
+        ax4.axhline(y=0, color='k', linestyle='-', linewidth=1, alpha=0.5)
+        
+        if T_ok != float('inf') and T_ok <= 6:
+            ax4.axvline(x=T_ok, color='r', linestyle='--', linewidth=1.5, alpha=0.7)
+            ax4.plot(T_ok, 0, 'ro', markersize=8)
+            max_cash = max(cumulative_cash) if max(cumulative_cash) > 0 else 10000
+            ax4.annotate(f'Окупаемость\n{T_ok:.1f} лет', 
+                        xy=(T_ok, 0),
+                        xytext=(T_ok * 0.7, max_cash * 0.3),
+                        fontsize=8, ha='center',
+                        arrowprops=dict(arrowstyle='->', color='gray', lw=1))
+        
+        ax4.set_xlabel('Годы')
+        ax4.set_ylabel('Накопленный денежный поток (руб)')
+        ax4.set_title('Накопленный денежный поток и срок окупаемости', 
+                     fontsize=11, fontweight='bold')
+        ax4.grid(True, alpha=0.3)
+        ax4.legend(fontsize=9)
+        ax4.set_xlim(0, 5.5)
+        ax4.set_xticks(years)
+
+        canvas.fig.tight_layout(pad=2.0)
+        canvas.draw()
 
     def load_example(self):
         self.tu.setValue(194.4)
@@ -626,6 +900,14 @@ class EconomicCalculator(QMainWindow):
             T_ok = self.safe_divide(R_total, E) if E > 0 else float('inf')
             E_eff = self.safe_divide(E, R_total) if R_total > 0 else 0
 
+            self.calculation_data = {
+                'Z_ot': Z_ot, 'Z_mv': Z_mv, 'Z_el': Z_el, 'Z_pr': Z_pr,
+                'Z_rp': Z_rp, 'A': A, 'total_expenses': total_expenses,
+                'E': E, 'E_eff': E_eff, 'T_ok': T_ok,
+                'T_r': T_r, 'work_hours': work_hours,
+                'T': T, 'Z_b': Z_b, 'Z_pp': Z_pp, 'R_total': R_total
+            }
+
             def fmt(v):
                 return self.format_number(v)
 
@@ -635,7 +917,7 @@ class EconomicCalculator(QMainWindow):
             def fmt_idx(text):
                 return self.format_with_indices(text)
 
-            # ----- текст для копирования (без индексов) -----
+            # ----- текст для копирования -----
             lines = []
             lines.append("="*60)
             lines.append("РЕЗУЛЬТАТЫ РАСЧЁТА ЭКОНОМИЧЕСКОЙ ЭФФЕКТИВНОСТИ")
@@ -724,11 +1006,11 @@ class EconomicCalculator(QMainWindow):
 
             self.results_text = "\n".join(lines)
 
-            # ----- ВЫВОД В ИНТЕРФЕЙС (с индексами и кликабельными блоками) -----
+            # ----- ВЫВОД В ИНТЕРФЕЙС -----
             self.clear_results()
             self.copy_btn.setVisible(True)
 
-            title = QLabel("<b>📊 РЕЗУЛЬТАТЫ РАСЧЁТА</b>")
+            title = QLabel("<b>РЕЗУЛЬТАТЫ РАСЧЁТА</b>")
             title.setStyleSheet("font-size: 18px; color: #1f2a44; margin-bottom: 5px;")
             self.results_layout.addWidget(title)
 
@@ -839,7 +1121,6 @@ class EconomicCalculator(QMainWindow):
                 )
                 layout.addWidget(result_label)
 
-                # Подключаем сигнал без параметра 'checked'
                 group.clicked.connect(
                     lambda n=name, g=general_formula, s=formula_with_values, v=value, u=unit, vnames=var_names:
                     self.show_formula_details(
@@ -953,7 +1234,6 @@ class EconomicCalculator(QMainWindow):
                 ['Э', 'Робщ']
             )
 
-            # Заключение
             line2 = QFrame()
             line2.setFrameShape(QFrame.HLine)
             line2.setFrameShadow(QFrame.Sunken)
@@ -962,28 +1242,30 @@ class EconomicCalculator(QMainWindow):
             conclusion = QLabel()
             conclusion.setAlignment(Qt.AlignCenter)
             if E > 0 and T_ok < 3:
-                conclusion.setText("✅ РАЗРАБОТКА ЭКОНОМИЧЕСКИ ЦЕЛЕСООБРАЗНА")
+                conclusion.setText("РАЗРАБОТКА ЭКОНОМИЧЕСКИ ЦЕЛЕСООБРАЗНА")
                 conclusion.setStyleSheet("background: #e2f0d9; color: #1e6b2e; font-size: 16px; font-weight: bold; border-radius: 10px; padding: 12px;")
             elif E > 0:
-                conclusion.setText("⚠ РАЗРАБОТКА ЭКОНОМИЧЕСКИ ОПРАВДАНА, НО СРОК ОКУПАЕМОСТИ ВЫШЕ НОРМЫ")
+                conclusion.setText("РАЗРАБОТКА ЭКОНОМИЧЕСКИ ОПРАВДАНА, НО СРОК ОКУПАЕМОСТИ ВЫШЕ НОРМЫ")
                 conclusion.setStyleSheet("background: #fff3cd; color: #856404; font-size: 16px; font-weight: bold; border-radius: 10px; padding: 12px;")
             else:
-                conclusion.setText("❌ РАЗРАБОТКА ЭКОНОМИЧЕСКИ НЕЦЕЛЕСООБРАЗНА")
+                conclusion.setText("РАЗРАБОТКА ЭКОНОМИЧЕСКИ НЕЦЕЛЕСООБРАЗНА")
                 conclusion.setStyleSheet("background: #f8d7da; color: #721c24; font-size: 16px; font-weight: bold; border-radius: 10px; padding: 12px;")
             self.results_layout.addWidget(conclusion)
 
-            info_label = QLabel("💡 Для копирования отдельных формул выделите текст в поле выше и нажмите Ctrl+C")
+            info_label = QLabel("Для копирования отдельных формул выделите текст в поле выше и нажмите Ctrl+C")
             info_label.setStyleSheet("color: #6c757d; font-size: 10pt; font-style: italic; padding: 5px;")
             info_label.setAlignment(Qt.AlignCenter)
             self.results_layout.addWidget(info_label)
 
-            click_hint = QLabel("🖱️ Кликните на любой блок с формулой для подробного просмотра")
+            click_hint = QLabel("Кликните на любой блок с формулой для подробного просмотра")
             click_hint.setStyleSheet("color: #5b7cfa; font-size: 10pt; font-weight: bold; padding: 5px;")
             click_hint.setAlignment(Qt.AlignCenter)
             self.results_layout.addWidget(click_hint)
 
             self.results_layout.addStretch()
             self.tabs.setCurrentIndex(1)
+
+            self.draw_charts()
 
         except Exception as e:
             QMessageBox.critical(self, "Ошибка", f"Произошла ошибка при расчёте:\n{str(e)}")
