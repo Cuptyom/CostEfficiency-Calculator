@@ -499,8 +499,17 @@ class EconomicCalculator(QMainWindow):
         layout.addWidget(self.export_btn)
 
     def setup_charts_tab(self):
-        """Настройка вкладки с графиками"""
-        layout = QVBoxLayout(self.charts_tab)
+        """Настройка вкладки с графиками (с прокруткой)"""
+        # Основной скролл-контейнер
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+        scroll.setVerticalScrollBarPolicy(Qt.ScrollBarAsNeeded)
+
+        # Контейнер для всех элементов
+        container = QWidget()
+        layout = QVBoxLayout(container)
+        layout.setSpacing(10)
         layout.setContentsMargins(10, 10, 10, 10)
 
         # Информационная панель
@@ -544,25 +553,40 @@ class EconomicCalculator(QMainWindow):
 
         layout.addWidget(param_group)
 
-        # Канва графика
-        self.chart_canvas = MplCanvas(self, width=9, height=7, dpi=100)
-
-        toolbar = NavigationToolbar(self.chart_canvas, self)
-        layout.addWidget(toolbar)
+        # Канва графика (увеличиваем размер)
+        self.chart_canvas = MplCanvas(self, width=12, height=8, dpi=100)
+        # Разрешаем холсту растягиваться
+        self.chart_canvas.setSizePolicy(QSizePolicy.Expanding, QSizePolicy.Expanding)
         layout.addWidget(self.chart_canvas)
 
+        # Панель навигации Matplotlib
+        toolbar = NavigationToolbar(self.chart_canvas, self)
+        layout.addWidget(toolbar)
+
+        # Кнопки управления
         refresh_btn = QPushButton("Обновить графики")
         refresh_btn.setMinimumHeight(35)
         refresh_btn.clicked.connect(self.update_charts)
         layout.addWidget(refresh_btn)
 
-        # Кнопка экспорта данных графиков в CSV
         self.export_charts_btn = QPushButton("Экспортировать данные графиков (CSV)")
         self.export_charts_btn.setMinimumHeight(35)
         self.export_charts_btn.clicked.connect(self.export_charts_data_csv)
         self.export_charts_btn.setVisible(False)
         layout.addWidget(self.export_charts_btn)
 
+        # Добавляем растяжку в конце
+        layout.addStretch()
+
+        # Устанавливаем контейнер в скролл-область
+        scroll.setWidget(container)
+
+        # Размещаем скролл-область на вкладке
+        main_layout = QVBoxLayout(self.charts_tab)
+        main_layout.setContentsMargins(0, 0, 0, 0)
+        main_layout.addWidget(scroll)
+
+        # Рисуем заглушку (пустой график)
         self.draw_empty_chart()
 
     def on_sales_params_changed(self):
