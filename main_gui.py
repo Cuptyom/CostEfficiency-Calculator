@@ -681,7 +681,7 @@ class EconomicCalculator(QMainWindow):
                 legend_handles,
                 legend_labels,
                 loc='center left',
-                bbox_to_anchor=(-0.35, 0.5),
+                bbox_to_anchor=(-0.8, 0.5),
                 fontsize=8,
                 framealpha=0.95,
                 edgecolor='#d0d8e6',
@@ -692,7 +692,7 @@ class EconomicCalculator(QMainWindow):
                 handletextpad=0.8
             )
             ax1.set_title('Структура затрат на разработку', fontsize=11, fontweight='bold', color='#2c3e50')
-            ax1.set_position([0.2, 0.55, 0.6, 0.35])
+            ax1.set_position([0.2, 0.55, 0.2, 0.35])
         else:
             ax1.text(0.5, 0.5, 'Нет данных', ha='center', va='center', fontsize=12)
             ax1.set_title('Структура затрат', fontsize=11, fontweight='bold')
