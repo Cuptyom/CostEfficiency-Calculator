@@ -730,7 +730,7 @@ class EconomicCalculator(QMainWindow):
             if sales_per_month > 0:
                 payback_months = break_even_units / sales_per_month
                 ax2.text(0.98, 0.05,
-                         f'Срок окупаемости: {payback_months:.1f} мес.\n'
+                         f'Точка безубыточности: {payback_months:.1f} мес.\n'
                          f'(при {sales_per_month} шт./мес.)',
                          transform=ax2.transAxes,
                          fontsize=8,
